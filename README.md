@@ -43,7 +43,7 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 3. **프리셋** 드롭다운에서 프롬프트 선택/편집 후 **[프롬프트 저장]**
 4. 상태 표시 옆 **⚙ 아이콘**을 눌러 글로벌 단축키 변경 가능 (예: `Ctrl+Shift+F9`)
 5. 아무 프로그램에서 텍스트를 복사/잘라내기 후 설정된 단축키 입력
-6. 성공 시 `800Hz` 비프음과 함께 `결과(OUT)`이 갱신되고 클립보드에 복사됩니다
+6. 번역 시작 시 두 음(523→659Hz)의 시작음이 울리고, 성공 시 `800Hz` 완료음과 함께 `결과(OUT)`이 갱신되어 클립보드에 복사됩니다
    - 실패 시 `300Hz` 경고음과 오류 메시지 표시
 
 ## UI
@@ -53,6 +53,7 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 - 프리셋 선택/추가/삭제, 프롬프트 편집, 최근 결과(재복사), API 키 관리
 - 단축키 변경 시 기존 등록을 해제하고 즉시 재등록 (실패 시 기존 단축키 복원)
 - 창 크기 `380 × 500` (최소 높이 470, DPI 자동 스케일)
+- 알림음: 시작(523→659Hz 상승 두 음) / 성공(800Hz) / 실패(300Hz)로 구분
 
 ## 설정 파일
 
@@ -63,13 +64,13 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 | 필드 | 설명 | 기본값 |
 | --- | --- | --- |
 | `api_key` | Gemini API Key (저장소에 커밋 금지) | `""` |
-| `model` | 사용할 Gemini 모델 | `gemini-3.5-flash-lite` |
+| `model` | 사용할 Gemini 모델 | `gemini-flash-lite-latest` |
 | `hotkey` | 글로벌 단축키 | `Ctrl+Shift+T` |
 | `always_on_top` | 항상 위 표시 | `true` |
 | `active_profile` | 현재 선택된 프리셋 이름 | `WoW 북미 서버 채팅` |
 | `profiles` | 이름과 시스템 프롬프트 목록 | 4개 기본 프리셋 |
 
-단축키는 `Ctrl`, `Alt`, `Shift`, `Win` 조합과 `A-Z`, `0-9`, `F1-F20`, `Space`, `Tab`, `Enter`, `Esc`, `Delete`, 방향키를 지원합니다. 구버전 기본 모델(`gemini-2.5-flash-lite`)이 설정되어 있으면 실행 시 자동으로 현재 기본 모델로 마이그레이션됩니다.
+단축키는 `Ctrl`, `Alt`, `Shift`, `Win` 조합과 `A-Z`, `0-9`, `F1-F20`, `Space`, `Tab`, `Enter`, `Esc`, `Delete`, 방향키를 지원합니다. 이전 기본 모델(`gemini-2.5-flash-lite`, `gemini-3.5-flash-lite`)이 설정되어 있으면 실행 시 `gemini-flash-lite-latest`로 자동 마이그레이션됩니다.
 
 ## 프로젝트 구조
 

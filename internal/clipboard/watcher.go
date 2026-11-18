@@ -45,6 +45,7 @@ type Watcher struct {
 	cfg      *config.Config
 	onStatus func(StatusUpdate)
 	onUpdate func(Update)
+	onStart  func()
 
 	mu       sync.Mutex
 	busy     bool
@@ -55,12 +56,14 @@ type Watcher struct {
 }
 
 // New creates a watcher. The callbacks may be called from any goroutine; the
-// GUI is responsible for marshalling them onto the UI thread.
-func New(cfg *config.Config, onStatus func(StatusUpdate), onUpdate func(Update)) *Watcher {
+// GUI is responsible for marshalling them onto the UI thread. onStart runs only
+// when clipboard text is present and a translation is actually about to begin.
+func New(cfg *config.Config, onStatus func(StatusUpdate), onUpdate func(Update), onStart func()) *Watcher {
 	return &Watcher{
 		cfg:      cfg,
 		onStatus: onStatus,
 		onUpdate: onUpdate,
+		onStart:  onStart,
 		stop:     make(chan struct{}),
 		reload:   make(chan struct{}, 1),
 	}
@@ -231,6 +234,10 @@ func (w *Watcher) process() {
 	if strings.TrimSpace(input) == "" {
 		w.status(StatusIdle, "")
 		return
+	}
+
+	if w.onStart != nil {
+		w.onStart()
 	}
 
 	profile := w.cfg.Active()

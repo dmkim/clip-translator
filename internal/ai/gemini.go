@@ -17,7 +17,7 @@ import (
 const (
 	endpoint = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"
 	// DefaultModel is used when the caller does not specify one.
-	DefaultModel = "gemini-3.5-flash-lite"
+	DefaultModel = "gemini-flash-lite-latest"
 	// DefaultTimeout bounds a single generation request. Gemini 3 models can
 	// take longer than the old 8 second budget, especially on cold starts.
 	DefaultTimeout = 30 * time.Second

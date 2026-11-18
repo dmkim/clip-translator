@@ -553,6 +553,15 @@ var (
 	beepProc = kernel32.NewProc("Beep")
 )
 
+// PlayStart emits the start chime: two short rising notes (523 Hz, 659 Hz).
+func PlayStart() {
+	go func() {
+		_, _, _ = beepProc.Call(523, 80)
+		time.Sleep(40 * time.Millisecond)
+		_, _, _ = beepProc.Call(659, 80)
+	}()
+}
+
 // PlaySuccess emits the success beep (800 Hz, 120 ms).
 func PlaySuccess() {
 	playBeep(800, 120)

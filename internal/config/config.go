@@ -136,10 +136,11 @@ func (c *Config) ModelName() string {
 	return normalizeModel(c.Model)
 }
 
-// legacyModels maps retired model IDs to a currently available replacement so
-// existing config files keep working after a model is shut down.
+// legacyModels maps previously used model IDs to the current default so
+// existing config files follow the configured default after an update.
 var legacyModels = map[string]string{
 	"gemini-2.5-flash-lite": DefaultModel,
+	"gemini-3.5-flash-lite": DefaultModel,
 }
 
 func normalizeModel(value string) string {

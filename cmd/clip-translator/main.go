@@ -47,6 +47,7 @@ func main() {
 				ui.PlaySuccess()
 			}
 		},
+		ui.PlayStart,
 	)
 
 	if err := watcher.Start(); err != nil {

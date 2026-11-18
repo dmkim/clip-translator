@@ -9,7 +9,7 @@ const (
 	// DefaultHotkey is the global shortcut written to a missing config file.
 	DefaultHotkey = "Ctrl+Shift+T"
 	// DefaultModel is the Gemini model written to a missing config file.
-	DefaultModel = "gemini-3.5-flash-lite"
+	DefaultModel = "gemini-flash-lite-latest"
 	// DefaultProfileName is the profile selected on first run.
 	DefaultProfileName = "WoW 북미 서버 채팅"
 )
