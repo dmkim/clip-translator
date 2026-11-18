@@ -1,0 +1,15 @@
+# Build output
+/bin/
+*.exe
+*.syso
+
+# Local configuration (contains the Gemini API key)
+/config.json
+/config.json.bad
+/config.json.tmp
+
+# Editor / OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
