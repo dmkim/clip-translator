@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"fmt"
 	"image/png"
 	"strings"
 	"syscall"
@@ -18,6 +19,8 @@ import (
 
 	appclipboard "github.com/genius/clip-translator/internal/clipboard"
 	"github.com/genius/clip-translator/internal/config"
+	"github.com/genius/clip-translator/internal/update"
+	"github.com/genius/clip-translator/internal/version"
 )
 
 const (
@@ -262,6 +265,78 @@ func (w *Window) SetStatus(u appclipboard.StatusUpdate) {
 // ShowUpdate applies a pipeline result on the UI thread.
 func (w *Window) ShowUpdate(u appclipboard.Update) {
 	w.post(func() { w.applyUpdate(u) })
+}
+
+// CheckForUpdates checks GitHub for a newer release shortly after startup and
+// prompts the user to install it. It is a no-op for development builds.
+func (w *Window) CheckForUpdates() {
+	go func() {
+		time.Sleep(3 * time.Second)
+		w.checkForUpdates()
+	}()
+}
+
+func (w *Window) checkForUpdates() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	rel, err := update.Check(ctx)
+	if err != nil || rel == nil {
+		return
+	}
+	w.promptUpdate(rel)
+}
+
+func (w *Window) promptUpdate(rel *update.Release) {
+	w.post(func() {
+		notes := rel.Notes
+		if notes == "" {
+			notes = "릴리스 노트가 없습니다."
+		}
+
+		message := fmt.Sprintf(
+			"새 버전 v%s이(가) 있습니다. (현재 v%s)\n\n%s\n\n지금 업데이트할까요?",
+			rel.Version, version.Current(), notes,
+		)
+		if walk.MsgBox(w.mw, "업데이트 사용 가능", message,
+			walk.MsgBoxYesNo|walk.MsgBoxIconInformation) != walk.DlgCmdYes {
+			return
+		}
+
+		w.installUpdate(rel)
+	})
+}
+
+func (w *Window) installUpdate(rel *update.Release) {
+	w.statusGen++
+	w.statusLabel.SetText("🔵 업데이트 다운로드 중...")
+	_ = w.statusLabel.SetToolTipText("")
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		if err := update.Apply(ctx, rel); err != nil {
+			w.post(func() {
+				w.flashStatus("🔴 업데이트 실패")
+				walk.MsgBox(w.mw, "업데이트 실패",
+					err.Error()+"\n\nGitHub 릴리스에서 직접 내려받아 주세요.\n"+rel.URL,
+					walk.MsgBoxIconError)
+			})
+			return
+		}
+
+		w.post(func() {
+			walk.MsgBox(w.mw, "업데이트 완료",
+				"새 버전이 설치되었습니다. 프로그램을 다시 시작합니다.",
+				walk.MsgBoxIconInformation)
+			if err := update.Restart(); err != nil {
+				walk.MsgBox(w.mw, "재시작 실패",
+					err.Error()+"\n프로그램을 직접 다시 실행해 주세요.",
+					walk.MsgBoxIconError)
+			}
+		})
+	}()
 }
 
 func (w *Window) applyStatus(u appclipboard.StatusUpdate) {

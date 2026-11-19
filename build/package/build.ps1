@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Output = "bin/clip-translator.exe"
+    [string]$Output = "bin/clip-translator.exe",
+    [string]$Version = "dev"
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,8 +42,9 @@ try {
     $outDir = Split-Path -Parent $outPath
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-    Write-Host "Building $Output ..."
-    & go build -trimpath -ldflags="-H=windowsgui -s -w" -o $outPath ./cmd/clip-translator
+    Write-Host "Building $Output (version $Version) ..."
+    $ldflags = "-H=windowsgui -s -w -X github.com/genius/clip-translator/internal/version.Version=$Version"
+    & go build -trimpath "-ldflags=$ldflags" -o $outPath ./cmd/clip-translator
     if ($LASTEXITCODE -ne 0) {
         throw "go build failed with exit code $LASTEXITCODE"
     }

@@ -23,6 +23,12 @@
 ./build/package/build.ps1
 ```
 
+버전을 주입하려면 `-Version`을 지정합니다. `dev`(기본값)로 빌드하면 자동 업데이트 확인을 건너뜁니다.
+
+```powershell
+./build/package/build.ps1 -Version v0.1.0
+```
+
 스크립트는 다음을 수행합니다.
 
 1. `rsrc`가 없으면 `go install github.com/akavel/rsrc@latest`로 설치
@@ -74,6 +80,34 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 
 응답 지연을 줄이기 위해 `temperature`는 0.3으로 낮추고 내부 추론을 최소화합니다. Flash-Lite 계열(Gemini 3.x, `-latest`)은 `thinkingLevel: minimal`, Gemini 2.5 Flash는 `thinkingBudget: 0`을 사용하며, 그 외 모델에는 추론 옵션을 보내지 않습니다. 또한 앱 시작 시 Gemini 엔드포인트에 미리 연결하고 최대 30분간 커넥션을 유지해 첫 요청·재연결 지연을 줄입니다.
 
+## 자동 업데이트
+
+앱은 시작 3초 후 GitHub Releases를 확인하고, 새 버전이 있으면 릴리스 노트와 함께 업데이트 여부를 묻습니다. 승인하면 실행 파일을 내려받아 SHA256 체크섬을 검증한 뒤 교체하고 자동으로 재시작합니다.
+
+- 저장소: `dmkim/clip-translator`
+- 확인 주소: GitHub Releases의 최신 정식 릴리스 (draft/pre-release 제외)
+- 개발 빌드(`-Version` 미지정, `dev`)는 확인을 건너뜁니다
+- `config.json`은 그대로 유지됩니다
+- Program Files처럼 쓰기 권한이 없는 위치에서는 교체가 실패할 수 있으며, 이 경우 안내 메시지와 함께 릴리스 페이지 링크를 보여줍니다
+
+### 릴리스 절차
+
+1. `v0.1.0` 형식의 태그를 push합니다.
+2. GitHub Actions(`.github/workflows/release.yml`)가 Windows 바이너리를 빌드하고 `checksums.txt`와 함께 릴리스에 업로드합니다.
+3. 태그가 버전으로 주입되므로 이후 실행부터 자동 업데이트 대상이 됩니다.
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+릴리스 자산은 다음 두 파일이어야 합니다.
+
+| 자산 | 설명 |
+| --- | --- |
+| `clip-translator_windows_amd64.exe` | `-H=windowsgui`로 빌드된 단일 실행 파일 |
+| `checksums.txt` | `sha256sum` 형식(`<hash>  <filename>`)의 체크섬 |
+
 ## 프로젝트 구조
 
 ```text
@@ -84,7 +118,10 @@ clip-translator/
 ├── internal/clipboard/watcher.go    # 글로벌 단축키 + 클립보드 파이프라인
 ├── internal/ui/window.go            # walk GUI, 상태 표시, 비프음
 ├── internal/ui/assets/              # 앱 아이콘/단축키 아이콘 (임베드)
+├── internal/version/version.go      # 빌드 시 주입되는 버전
+├── internal/update/update.go        # GitHub Releases 기반 자동 업데이트
 ├── configs/config.example.json      # 설정 템플릿
+├── .github/workflows/release.yml    # 태그 push 시 릴리스 빌드/업로드
 └── build/package/                   # 매니페스트, 앱 아이콘(.ico), 빌드 스크립트
 ```
 

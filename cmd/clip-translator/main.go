@@ -68,6 +68,7 @@ func main() {
 		return nil
 	})
 	win.SetOnClosing(watcher.Stop)
+	win.CheckForUpdates()
 
 	app.Run()
 }
