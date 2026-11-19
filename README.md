@@ -72,7 +72,7 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 | `api_key` | Gemini API Key (저장소에 커밋 금지) | `""` |
 | `model` | 사용할 Gemini 모델 | `gemini-flash-lite-latest` |
 | `hotkey` | 글로벌 단축키 | `Ctrl+Shift+T` |
-| `always_on_top` | 항상 위 표시 | `true` |
+| `always_on_top` | 항상 위 표시 | `false` |
 | `active_profile` | 현재 선택된 프리셋 이름 | `WoW 북미 서버 채팅` |
 | `profiles` | 이름과 시스템 프롬프트 목록 | 4개 기본 프리셋 |
 

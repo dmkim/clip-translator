@@ -340,7 +340,7 @@ func (c *Config) applyDefaults() {
 		c.ActiveProfile = tpl.ActiveProfile
 		c.Profiles = tpl.Profiles
 	} else {
-		c.AlwaysOnTop = true
+		c.AlwaysOnTop = false
 		c.Hotkey = DefaultHotkey
 		c.Model = DefaultModel
 		c.ActiveProfile = DefaultProfileName
