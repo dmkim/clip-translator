@@ -83,9 +83,9 @@ clip-translator/
 ├── internal/ai/gemini.go            # Gemini REST 클라이언트 (30초 타임아웃)
 ├── internal/clipboard/watcher.go    # 글로벌 단축키 + 클립보드 파이프라인
 ├── internal/ui/window.go            # walk GUI, 상태 표시, 비프음
-├── internal/ui/assets/gear.png      # 단축키 변경 아이콘 (임베드)
+├── internal/ui/assets/              # 앱 아이콘/단축키 아이콘 (임베드)
 ├── configs/config.example.json      # 설정 템플릿
-└── build/package/                   # 매니페스트 및 빌드 스크립트
+└── build/package/                   # 매니페스트, 앱 아이콘(.ico), 빌드 스크립트
 ```
 
 ## 보안

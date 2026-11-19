@@ -28,10 +28,11 @@ try {
     }
 
     $manifest = Join-Path $PSScriptRoot "clip-translator.exe.manifest"
+    $icon = Join-Path $PSScriptRoot "clip-translator.ico"
     $syso = Join-Path $root "cmd\clip-translator\rsrc.syso"
 
-    Write-Host "Generating resources from $manifest ..."
-    & $rsrcPath -manifest $manifest -o $syso
+    Write-Host "Generating resources from $manifest and $icon ..."
+    & $rsrcPath -manifest $manifest -ico $icon -o $syso
     if ($LASTEXITCODE -ne 0) {
         throw "rsrc failed with exit code $LASTEXITCODE"
     }

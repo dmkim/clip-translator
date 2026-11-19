@@ -30,6 +30,22 @@ const (
 //go:embed assets/gear.png
 var gearPNG []byte
 
+//go:embed assets/appicon.png
+var appIconPNG []byte
+
+// loadAppIcon decodes the embedded application icon for the window title bar.
+func loadAppIcon() *walk.Icon {
+	img, err := png.Decode(bytes.NewReader(appIconPNG))
+	if err != nil {
+		return nil
+	}
+	icon, err := walk.NewIconFromImage(img)
+	if err != nil {
+		return nil
+	}
+	return icon
+}
+
 // loadGearIcon decodes the embedded 48px gear image at a 96dpi size of 10px.
 func loadGearIcon() *walk.Icon {
 	img, err := png.Decode(bytes.NewReader(gearPNG))
@@ -72,6 +88,7 @@ func New(cfg *config.Config) (*Window, error) {
 	err := (d.MainWindow{
 		AssignTo:        &w.mw,
 		Title:           "Clip Translator",
+		Icon:            loadAppIcon(),
 		Size:            d.Size{Width: defaultWindowWidth, Height: defaultWindowHeight},
 		MinSize:         d.Size{Width: defaultWindowWidth, Height: defaultWindowMinHeight},
 		DisableMaximize: true,
