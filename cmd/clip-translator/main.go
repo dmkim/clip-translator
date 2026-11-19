@@ -7,12 +7,15 @@ import (
 
 	"github.com/tailscale/walk"
 
+	"github.com/genius/clip-translator/internal/ai"
 	"github.com/genius/clip-translator/internal/clipboard"
 	"github.com/genius/clip-translator/internal/config"
 	"github.com/genius/clip-translator/internal/ui"
 )
 
 func main() {
+	go ai.Warmup()
+
 	app, err := walk.InitApp()
 	if err != nil {
 		log.Fatal(err)

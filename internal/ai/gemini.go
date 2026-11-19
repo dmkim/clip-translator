@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,7 +22,27 @@ const (
 	// DefaultTimeout bounds a single generation request. Gemini 3 models can
 	// take longer than the old 8 second budget, especially on cold starts.
 	DefaultTimeout = 30 * time.Second
+	// warmupURL is used to pre-establish DNS/TCP/TLS without an API call.
+	warmupURL = "https://generativelanguage.googleapis.com/"
 )
+
+// sharedHTTPClient keeps warmed connections alive across translations.
+var sharedHTTPClient = &http.Client{
+	Timeout: DefaultTimeout,
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   4,
+		IdleConnTimeout:       30 * time.Minute,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	},
+}
 
 // ErrMissingAPIKey is returned when the client is used without an API key.
 var ErrMissingAPIKey = errors.New("Gemini API 키가 설정되지 않았습니다. 하단 API 설정에서 키를 저장하세요")
@@ -42,8 +63,27 @@ func New(apiKey, model string) *Client {
 	return &Client{
 		apiKey: strings.TrimSpace(apiKey),
 		model:  model,
-		http:   &http.Client{Timeout: DefaultTimeout},
+		http:   sharedHTTPClient,
 	}
+}
+
+// Warmup pre-establishes DNS, TCP and TLS for the Gemini endpoint so the first
+// translation can reuse an existing connection. It makes no API request and is
+// safe to call in a background goroutine.
+func Warmup() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, warmupURL, nil)
+	if err != nil {
+		return
+	}
+	resp, err := sharedHTTPClient.Do(req)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+	_ = resp.Body.Close()
 }
 
 type generateRequest struct {
