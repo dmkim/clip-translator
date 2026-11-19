@@ -24,8 +24,8 @@ import (
 const (
 	// repository is the GitHub "owner/repo" that publishes releases.
 	repository = "dmkim/clip-translator"
-	// assetName is the Windows amd64 executable attached to each release.
-	assetName = "clip-translator_windows_amd64.exe"
+	// assetName is the Windows executable attached to each release.
+	assetName = "clip-translator.exe"
 	// checksumsFile is the release asset containing SHA256 sums.
 	checksumsFile = "checksums.txt"
 	// maxNotes caps release notes so the confirmation dialog stays readable.

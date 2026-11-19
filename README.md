@@ -105,7 +105,7 @@ git push origin v0.1.0
 
 | 자산 | 설명 |
 | --- | --- |
-| `clip-translator_windows_amd64.exe` | `-H=windowsgui`로 빌드된 단일 실행 파일 |
+| `clip-translator.exe` | `-H=windowsgui`로 빌드된 단일 실행 파일 |
 | `checksums.txt` | `sha256sum` 형식(`<hash>  <filename>`)의 체크섬 |
 
 ## 프로젝트 구조

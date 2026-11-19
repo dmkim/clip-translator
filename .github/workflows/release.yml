@@ -26,20 +26,20 @@ jobs:
         run: >
           ./build/package/build.ps1
           -Version "${{ github.ref_name }}"
-          -Output "dist/clip-translator_windows_amd64.exe"
+          -Output "dist/clip-translator.exe"
 
       - name: Generate checksums
         shell: pwsh
         run: |
-          $path = "dist/clip-translator_windows_amd64.exe"
+          $path = "dist/clip-translator.exe"
           $hash = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLower()
-          "$hash  clip-translator_windows_amd64.exe" |
+          "$hash  clip-translator.exe" |
             Out-File -FilePath "dist/checksums.txt" -Encoding ascii
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/clip-translator_windows_amd64.exe
+            dist/clip-translator.exe
             dist/checksums.txt
           generate_release_notes: true
