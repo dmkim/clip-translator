@@ -228,6 +228,12 @@ func New(cfg *config.Config) (*Window, error) {
 	w.mw.ToolBar().SetVisible(false)
 	w.mw.StatusBar().SetVisible(false)
 
+	// Keep the API key cue banner visible on first run by focusing the result
+	// box once the initial layout has finished.
+	w.mw.RequestLayoutWithCompletionFunc(func() {
+		_ = w.outEdit.SetFocus()
+	})
+
 	w.initializing = false
 	w.applyTopMost()
 	time.AfterFunc(300*time.Millisecond, func() { w.post(w.fitProfileButtonHeight) })
