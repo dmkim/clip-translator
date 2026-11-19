@@ -62,7 +62,30 @@ type part struct {
 }
 
 type generationConfig struct {
-	Temperature float64 `json:"temperature"`
+	Temperature    float64         `json:"temperature"`
+	ThinkingConfig *thinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
+type thinkingConfig struct {
+	ThinkingBudget *int   `json:"thinkingBudget,omitempty"`
+	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
+}
+
+// generationConfigFor disables or minimizes internal reasoning where the model
+// supports it. Gemini 3 Flash-Lite rejects thinkingBudget and uses
+// thinkingLevel instead, while Gemini 2.5 Flash accepts a zero budget.
+func generationConfigFor(model string) generationConfig {
+	cfg := generationConfig{Temperature: 0.3}
+	name := strings.ToLower(model)
+
+	switch {
+	case strings.Contains(name, "gemini-2.5-flash"):
+		budget := 0
+		cfg.ThinkingConfig = &thinkingConfig{ThinkingBudget: &budget}
+	case strings.Contains(name, "flash-lite"):
+		cfg.ThinkingConfig = &thinkingConfig{ThinkingLevel: "minimal"}
+	}
+	return cfg
 }
 
 type generateResponse struct {
@@ -96,7 +119,7 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, input string) (stri
 			Role:  "user",
 			Parts: []part{{Text: input}},
 		}},
-		GenerationConfig: generationConfig{Temperature: 0.4},
+		GenerationConfig: generationConfigFor(c.model),
 	}
 	if strings.TrimSpace(systemPrompt) != "" {
 		reqBody.SystemInstruction = &content{
