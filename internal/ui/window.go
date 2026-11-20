@@ -28,10 +28,17 @@ const (
 	defaultWindowHeight    = 500
 	defaultWindowMinHeight = 470
 	newProfilePrompt       = "Translate the user's input into natural, idiomatic English. Output ONLY the translation."
+
+	// toolIconSize is the rendered size of the gear/help icons in pixels at
+	// 96 DPI. Change this value (e.g. 12, 14, 16, 18) to resize both icons.
+	toolIconSize = 10
 )
 
 //go:embed assets/gear.png
 var gearPNG []byte
+
+//go:embed assets/help.png
+var helpPNG []byte
 
 //go:embed assets/appicon.png
 var appIconPNG []byte
@@ -49,13 +56,41 @@ func loadAppIcon() *walk.Icon {
 	return icon
 }
 
-// loadGearIcon decodes the embedded 48px gear image at a 96dpi size of 10px.
+// loadGearIcon decodes the embedded gear image at toolIconSize.
 func loadGearIcon() *walk.Icon {
-	img, err := png.Decode(bytes.NewReader(gearPNG))
+	return loadToolIcon(gearPNG)
+}
+
+// loadHelpIcon decodes the embedded help image at toolIconSize.
+func loadHelpIcon() *walk.Icon {
+	return loadToolIcon(helpPNG)
+}
+
+// loadToolIcon decodes a PNG and renders it at toolIconSize, scaling the
+// source image for the current DPI.
+func loadToolIcon(data []byte) *walk.Icon {
+	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil
 	}
-	icon, err := walk.NewIconFromImageForDPI(img, 461)
+
+	b := img.Bounds()
+	source := b.Dx()
+	if b.Dy() > source {
+		source = b.Dy()
+	}
+	if source <= 0 {
+		return nil
+	}
+
+	// NewIconFromImageForDPI scales by 96/dpi, so pick the DPI that yields
+	// toolIconSize pixels at 96 DPI.
+	dpi := source * 96 / toolIconSize
+	if dpi < 1 {
+		dpi = 1
+	}
+
+	icon, err := walk.NewIconFromImageForDPI(img, dpi)
 	if err != nil {
 		return nil
 	}
@@ -123,6 +158,17 @@ func New(cfg *config.Config) (*Window, error) {
 						Text:             "항상 위",
 						Checked:          cfg.IsAlwaysOnTop(),
 						OnCheckedChanged: w.onTopMostChanged,
+					},
+					d.ImageView{
+						Image:       loadHelpIcon(),
+						Mode:        d.ImageViewModeIdeal,
+						Margin:      3,
+						ToolTipText: "도움말",
+						OnMouseUp: func(x, y int, button walk.MouseButton) {
+							if button == walk.LeftButton {
+								w.showHelp()
+							}
+						},
 					},
 				},
 			},
@@ -510,6 +556,21 @@ func (w *Window) saveAPIKey() {
 		return
 	}
 	w.flashStatus("🟢 API 키 저장됨")
+}
+
+func (w *Window) showHelp() {
+	message := fmt.Sprintf(
+		"1. 번역할 텍스트를 선택한 뒤 Ctrl+C 또는 Ctrl+X로 복사합니다.\n\n"+
+			"2. 어디서든 %s 단축키를 누르면 번역이 시작됩니다.\n\n"+
+			"3. 결과가 창에 표시되고 클립보드에 자동으로 복사됩니다.\n\n"+
+			"4. 원하는 곳에서 Ctrl+V로 붙여넣습니다.\n\n"+
+			"알림음으로 진행 상태를 확인할 수 있습니다.\n"+
+			"- 시작: 523→659Hz 상승 두 음\n"+
+			"- 성공: 800Hz\n"+
+			"- 실패: 300Hz",
+		w.cfg.HotkeySpec(),
+	)
+	walk.MsgBox(w.mw, "사용 방법", message, walk.MsgBoxIconInformation)
 }
 
 func (w *Window) changeHotkey() {
