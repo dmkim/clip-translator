@@ -86,6 +86,28 @@ func Warmup() {
 	_ = resp.Body.Close()
 }
 
+// KeepAlive warms up immediately and then refreshes the idle Gemini connection
+// periodically so a translation after a long pause does not pay the full
+// DNS/TCP/TLS setup cost.
+func KeepAlive(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+
+	Warmup()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			Warmup()
+		}
+	}
+}
+
 type generateRequest struct {
 	SystemInstruction *content         `json:"system_instruction,omitempty"`
 	Contents          []content        `json:"contents"`

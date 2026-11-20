@@ -121,6 +121,7 @@ type Window struct {
 	trayTipShown bool
 	quitting     bool
 	checking     atomic.Bool
+	toast        *toast
 }
 
 // windowTitle returns the caption bar text including the build version.
@@ -302,6 +303,9 @@ func New(cfg *config.Config) (*Window, error) {
 	})
 
 	_ = w.initTray()
+	if t, err := newToast(); err == nil {
+		w.toast = t
+	}
 
 	w.initializing = false
 	w.applyTopMost()
@@ -320,6 +324,10 @@ func New(cfg *config.Config) (*Window, error) {
 			return
 		}
 		w.disposeTray()
+		if w.toast != nil {
+			w.toast.dispose()
+			w.toast = nil
+		}
 		if w.onClosing != nil {
 			w.onClosing()
 		}
@@ -411,7 +419,7 @@ func (w *Window) showFromTray() {
 	w.mw.SetVisible(true)
 	win.ShowWindow(w.mw.Handle(), win.SW_RESTORE)
 	win.SetForegroundWindow(w.mw.Handle())
-	w.CheckForUpdates()
+	w.CheckForUpdatesFromTray()
 }
 
 // quit closes the window for real, stopping the clipboard watcher.
@@ -451,33 +459,82 @@ func (w *Window) ShowUpdate(u appclipboard.Update) {
 	w.post(func() { w.applyUpdate(u) })
 }
 
+// ShowBusy displays the translucent "<preset> 실행 중" toast.
+func (w *Window) ShowBusy() {
+	w.post(func() {
+		if w.toast == nil {
+			return
+		}
+		w.toast.show(w.cfg.ActiveProfileName() + " · Gemini 요청 중")
+	})
+}
+
+func (w *Window) hideBusy() {
+	if w.toast != nil {
+		w.toast.hide()
+	}
+}
+
 // CheckForUpdates checks GitHub for a newer release shortly after startup and
 // prompts the user to install it. It is a no-op for development builds.
 func (w *Window) CheckForUpdates() {
+	w.startUpdateCheck(false)
+}
+
+// CheckForUpdatesFromTray checks for updates and reports the result in the
+// status label so reopening from the tray is observable.
+func (w *Window) CheckForUpdatesFromTray() {
+	w.startUpdateCheck(true)
+}
+
+func (w *Window) startUpdateCheck(notify bool) {
+	if notify {
+		w.post(func() {
+			w.statusGen++
+			w.statusLabel.SetText("🔄 최신 버전 확인 중...")
+			_ = w.statusLabel.SetToolTipText("")
+		})
+	}
+
 	go func() {
 		time.Sleep(1 * time.Second)
 		if !w.checking.CompareAndSwap(false, true) {
+			if notify {
+				w.post(func() { w.flashStatus("🟡 업데이트 확인 중입니다") })
+			}
 			return
 		}
 		defer w.checking.Store(false)
-		w.checkForUpdates()
+		w.checkForUpdates(notify)
 	}()
 }
 
-func (w *Window) checkForUpdates() {
+func (w *Window) checkForUpdates(notify bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	rel, err := update.Check(ctx)
-	if err != nil || rel == nil {
+	if err != nil {
+		if notify {
+			w.post(func() { w.flashStatus("🟡 업데이트 확인 실패") })
+		}
 		return
 	}
-	w.promptUpdate(rel)
+	if rel == nil {
+		if notify {
+			w.post(func() { w.flashStatus("🟢 최신 버전입니다") })
+		}
+		return
+	}
+	w.promptUpdate(rel, notify)
 }
 
-func (w *Window) promptUpdate(rel *update.Release) {
+func (w *Window) promptUpdate(rel *update.Release, notify bool) {
 	w.post(func() {
 		if !w.mw.Visible() {
+			if notify {
+				w.flashStatus(w.idleText())
+			}
 			return
 		}
 
@@ -492,6 +549,9 @@ func (w *Window) promptUpdate(rel *update.Release) {
 		)
 		if walk.MsgBox(w.mw, "업데이트 사용 가능", message,
 			walk.MsgBoxYesNo|walk.MsgBoxIconInformation) != walk.DlgCmdYes {
+			if notify {
+				w.flashStatus(w.idleText())
+			}
 			return
 		}
 
@@ -533,6 +593,10 @@ func (w *Window) installUpdate(rel *update.Release) {
 
 func (w *Window) applyStatus(u appclipboard.StatusUpdate) {
 	w.statusGen++
+
+	if u.State != appclipboard.StatusProcessing {
+		w.hideBusy()
+	}
 
 	switch u.State {
 	case appclipboard.StatusProcessing:

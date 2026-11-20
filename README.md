@@ -86,7 +86,7 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 
 단축키는 `Ctrl`, `Alt`, `Shift`, `Win` 조합과 `A-Z`, `0-9`, `F1-F20`, `Space`, `Tab`, `Enter`, `Esc`, `Delete`, 방향키를 지원합니다. 이전 기본 모델(`gemini-2.5-flash-lite`, `gemini-3.5-flash-lite`)이 설정되어 있으면 실행 시 `gemini-flash-lite-latest`로 자동 마이그레이션됩니다.
 
-응답 지연을 줄이기 위해 `temperature`는 0.3으로 낮추고 내부 추론을 최소화합니다. Flash-Lite 계열(Gemini 3.x, `-latest`)은 `thinkingLevel: minimal`, Gemini 2.5 Flash는 `thinkingBudget: 0`을 사용하며, 그 외 모델에는 추론 옵션을 보내지 않습니다. 또한 앱 시작 시 Gemini 엔드포인트에 미리 연결하고 최대 30분간 커넥션을 유지해 첫 요청·재연결 지연을 줄입니다.
+응답 지연을 줄이기 위해 `temperature`는 0.3으로 낮추고 내부 추론을 최소화합니다. Flash-Lite 계열(Gemini 3.x, `-latest`)은 `thinkingLevel: minimal`, Gemini 2.5 Flash는 `thinkingBudget: 0`을 사용하며, 그 외 모델에는 추론 옵션을 보내지 않습니다. 또한 앱 시작 시 Gemini 엔드포인트에 미리 연결하고, 5분마다 연결을 갱신하며 최대 30분간 커넥션을 유지해 첫 요청·재연결 지연을 줄입니다.
 
 ## 자동 업데이트
 

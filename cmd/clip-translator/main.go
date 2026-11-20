@@ -2,8 +2,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/tailscale/walk"
 
@@ -14,7 +16,9 @@ import (
 )
 
 func main() {
-	go ai.Warmup()
+	keepAliveCtx, stopKeepAlive := context.WithCancel(context.Background())
+	defer stopKeepAlive()
+	go ai.KeepAlive(keepAliveCtx, 5*time.Minute)
 
 	app, err := walk.InitApp()
 	if err != nil {
@@ -50,7 +54,10 @@ func main() {
 				ui.PlaySuccess()
 			}
 		},
-		ui.PlayStart,
+		func() {
+			ui.PlayStart()
+			win.ShowBusy()
+		},
 	)
 
 	if err := watcher.Start(); err != nil {
