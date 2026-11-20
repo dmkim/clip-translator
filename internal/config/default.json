@@ -20,6 +20,10 @@
                      {
                          "name":  "핵심 3줄 요약 (한국어)",
                          "prompt":  "Summarize the provided text into 3 concise bullet points in Korean. Focus only on key takeaways. Output ONLY the summary."
+                     },
+                     {
+                         "name":  "맞춤법 검사 및 교정",
+                         "prompt":  "맞춤법 검사기. 입력된 문장의 맞춤법, 띄어쓰기, 문장부호를 교정하라.\r\n- 원문을 그대로 유지"
                      }
                  ]
 }
