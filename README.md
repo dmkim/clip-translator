@@ -14,7 +14,7 @@
 
 - Windows 10/11 (amd64)
 - Go 1.24+ (빌드 시, C 컴파일러 불필요)
-- Google Gemini API Key ([Google AI Studio](https://aistudio.google.com/apikey))
+- Google Gemini API Key ([Google AI Studio](https://aistudio.google.com/apikey)에서 무료로 발급 가능)
 
 ## 빌드
 
