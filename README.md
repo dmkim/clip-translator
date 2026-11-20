@@ -2,6 +2,14 @@
 
 클립보드의 텍스트를 Gemini로 변환해 다시 클립보드에 덮어쓰는 초경량 Windows 데스크톱 유틸리티입니다. 게임 채팅(WoW 북미 서버), 업무 메신저 영작, 문법 교정, 요약 등 어떤 환경에서도 동작합니다.
 
+## 다운로드
+
+**[최신 clip-translator.exe 다운로드](https://github.com/dmkim/clip-translator/releases/latest/download/clip-translator.exe)**
+
+> 이 앱은 코드 서명이 없는 개인 배포 빌드라 Windows SmartScreen 경고(예: "Windows의 PC 보호")가 표시될 수 있습니다. 소스 코드가 공개되어 있으니 안심하고 **[추가 정보] → [실행]**을 선택해 실행하면 됩니다.
+>
+> 무결성 확인이 필요하면 [checksums.txt](https://github.com/dmkim/clip-translator/releases/latest/download/checksums.txt)의 SHA256과 내려받은 파일을 비교하세요.
+
 ## 워크플로우
 
 1. 텍스트를 선택한 뒤 `Ctrl + X` 또는 `Ctrl + C`
