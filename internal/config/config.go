@@ -271,6 +271,42 @@ func (c *Config) SetPrompt(name, prompt string) bool {
 	return false
 }
 
+// RenameProfile changes the name of an existing profile, keeping the active
+// selection in sync. Empty names and names already used by another profile are
+// rejected.
+func (c *Config) RenameProfile(oldName, newName string) (Profile, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return Profile{}, errors.New("프리셋 이름을 입력하세요")
+	}
+
+	idx := -1
+	for i := range c.Profiles {
+		if c.Profiles[i].Name == oldName {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return Profile{}, fmt.Errorf("프리셋을 찾을 수 없습니다: %s", oldName)
+	}
+	if newName == oldName {
+		return c.Profiles[idx], nil
+	}
+	if c.nameTakenLocked(newName) {
+		return Profile{}, fmt.Errorf("이미 존재하는 이름입니다: %s", newName)
+	}
+
+	c.Profiles[idx].Name = newName
+	if c.ActiveProfile == oldName {
+		c.ActiveProfile = newName
+	}
+	return c.Profiles[idx], nil
+}
+
 // AddProfile appends a new profile and makes it active. A unique name is
 // generated when base is empty or already taken.
 func (c *Config) AddProfile(base, prompt string) Profile {

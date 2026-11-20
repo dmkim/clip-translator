@@ -199,6 +199,12 @@ func New(cfg *config.Config) (*Window, error) {
 								OnClicked: w.addProfile,
 							},
 							d.PushButton{
+								Text:        "이름",
+								MinSize:     d.Size{Width: 44},
+								ToolTipText: "프리셋 이름 변경",
+								OnClicked:   w.renameProfile,
+							},
+							d.PushButton{
 								Text:      "삭제",
 								MinSize:   d.Size{Width: 44},
 								OnClicked: w.removeProfile,
@@ -496,6 +502,73 @@ func (w *Window) addProfile() {
 	}
 	w.reloadProfiles(p.Name)
 	w.flashStatus("🟢 프리셋 추가됨")
+}
+
+func (w *Window) renameProfile() {
+	oldName := w.cfg.ActiveProfileName()
+
+	var dlg *walk.Dialog
+	var nameEdit *walk.LineEdit
+	var acceptPB, cancelPB *walk.PushButton
+
+	err := (d.Dialog{
+		AssignTo:      &dlg,
+		Title:         "프리셋 이름 변경",
+		Size:          d.Size{Width: 340, Height: 150},
+		MinSize:       d.Size{Width: 320, Height: 140},
+		Layout:        d.VBox{},
+		DefaultButton: &acceptPB,
+		CancelButton:  &cancelPB,
+		Children: []d.Widget{
+			d.Label{Text: "새 프리셋 이름"},
+			d.LineEdit{
+				AssignTo: &nameEdit,
+				Text:     oldName,
+			},
+			d.Composite{
+				Layout: d.HBox{},
+				Children: []d.Widget{
+					d.HSpacer{},
+					d.PushButton{
+						AssignTo: &acceptPB,
+						Text:     "변경",
+						OnClicked: func() {
+							name := strings.TrimSpace(nameEdit.Text())
+							if name == "" {
+								walk.MsgBox(dlg, "프리셋 이름 변경", "이름을 입력하세요.", walk.MsgBoxIconWarning)
+								return
+							}
+							if _, err := w.cfg.RenameProfile(oldName, name); err != nil {
+								walk.MsgBox(dlg, "프리셋 이름 변경", err.Error(), walk.MsgBoxIconWarning)
+								return
+							}
+							w.rebuildProfileMenu()
+							if err := w.cfg.Save(); err != nil {
+								w.flashStatus("🔴 설정 저장 실패: " + err.Error())
+							} else {
+								w.flashStatus("🟢 프리셋 이름 변경됨")
+							}
+							dlg.Accept()
+						},
+					},
+					d.PushButton{
+						AssignTo:  &cancelPB,
+						Text:      "취소",
+						OnClicked: func() { dlg.Cancel() },
+					},
+				},
+			},
+		},
+	}).Create(w.mw)
+	if err != nil {
+		walk.MsgBox(w.mw, "프리셋 이름 변경", err.Error(), walk.MsgBoxIconError)
+		return
+	}
+
+	_ = nameEdit.SetFocus()
+	nameEdit.SetTextSelection(0, -1)
+
+	dlg.Run()
 }
 
 func (w *Window) removeProfile() {
