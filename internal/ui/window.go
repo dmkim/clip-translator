@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image/png"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -115,6 +116,11 @@ type Window struct {
 	statusGen     uint64
 	hotkeyApplier func(string) error
 	onClosing     func()
+
+	trayIcon     *walk.NotifyIcon
+	trayTipShown bool
+	quitting     bool
+	checking     atomic.Bool
 }
 
 // windowTitle returns the caption bar text including the build version.
@@ -287,12 +293,15 @@ func New(cfg *config.Config) (*Window, error) {
 	// because the layout only reserves toolbar space when it has actions.
 	w.mw.ToolBar().SetVisible(false)
 	w.mw.StatusBar().SetVisible(false)
+	w.mw.SetExitOnClose(false)
 
 	// Keep the API key cue banner visible on first run by focusing the result
 	// box once the initial layout has finished.
 	w.mw.RequestLayoutWithCompletionFunc(func() {
 		_ = w.outEdit.SetFocus()
 	})
+
+	_ = w.initTray()
 
 	w.initializing = false
 	w.applyTopMost()
@@ -304,10 +313,17 @@ func New(cfg *config.Config) (*Window, error) {
 	w.rebuildProfileMenu()
 	w.profileButton.Menu().InitPopup().Attach(func() { w.syncProfileChecks() })
 
-	w.mw.Closing().Attach(func(*bool, walk.CloseReason) {
+	w.mw.Closing().Attach(func(canceled *bool, reason walk.CloseReason) {
+		if !w.quitting && w.trayIcon != nil {
+			*canceled = true
+			w.hideToTray()
+			return
+		}
+		w.disposeTray()
 		if w.onClosing != nil {
 			w.onClosing()
 		}
+		walk.App().Exit(0)
 	})
 
 	return w, nil
@@ -316,6 +332,108 @@ func New(cfg *config.Config) (*Window, error) {
 // SetOnClosing registers a callback invoked when the window is closing.
 func (w *Window) SetOnClosing(fn func()) {
 	w.onClosing = fn
+}
+
+// initTray creates the notification area icon. Tray support is optional: when
+// it fails, closing the window exits the app as before.
+func (w *Window) initTray() error {
+	ni, err := walk.NewNotifyIcon()
+	if err != nil {
+		return fmt.Errorf("NewNotifyIcon: %w", err)
+	}
+
+	ok := false
+	defer func() {
+		if !ok {
+			_ = ni.Dispose()
+		}
+	}()
+
+	if err := ni.SetIcon(loadAppIcon()); err != nil {
+		return fmt.Errorf("SetIcon: %w", err)
+	}
+	if err := ni.SetToolTip(windowTitle()); err != nil {
+		return fmt.Errorf("SetToolTip: %w", err)
+	}
+
+	ni.MouseUp().Attach(func(x, y int, button walk.MouseButton) {
+		if button == walk.LeftButton {
+			w.showFromTray()
+		}
+	})
+	ni.MessageClicked().Attach(w.showFromTray)
+
+	showAction := walk.NewAction()
+	_ = showAction.SetText("열기")
+	showAction.Triggered().Attach(w.showFromTray)
+
+	quitAction := walk.NewAction()
+	_ = quitAction.SetText("종료")
+	quitAction.Triggered().Attach(w.quit)
+
+	actions := ni.ContextMenu().Actions()
+	_ = actions.Add(showAction)
+	_ = actions.Add(walk.NewSeparatorAction())
+	_ = actions.Add(quitAction)
+
+	if err := ni.SetVisible(false); err != nil {
+		return fmt.Errorf("SetVisible(false): %w", err)
+	}
+
+	w.trayIcon = ni
+	ok = true
+	return nil
+}
+
+// hideToTray hides the window and keeps the app running from the tray.
+func (w *Window) hideToTray() {
+	if w.mw == nil {
+		return
+	}
+	w.mw.SetVisible(false)
+
+	if w.trayIcon == nil {
+		return
+	}
+	_ = w.trayIcon.SetVisible(true)
+	if !w.trayTipShown {
+		w.trayTipShown = true
+		_ = w.trayIcon.ShowInfo("Clip Translator",
+			"프로그램이 트레이에 상주 중입니다.\n트레이 아이콘을 클릭해 다시 열거나, 우클릭 메뉴에서 종료할 수 있습니다.")
+	}
+}
+
+// showFromTray restores the window and checks for a newer release.
+func (w *Window) showFromTray() {
+	if w.mw == nil {
+		return
+	}
+	w.mw.SetVisible(true)
+	win.ShowWindow(w.mw.Handle(), win.SW_RESTORE)
+	win.SetForegroundWindow(w.mw.Handle())
+	w.CheckForUpdates()
+}
+
+// quit closes the window for real, stopping the clipboard watcher.
+func (w *Window) quit() {
+	if w.quitting {
+		return
+	}
+	w.quitting = true
+	go w.post(func() {
+		if w.mw != nil {
+			_ = w.mw.Close()
+		}
+	})
+}
+
+func (w *Window) disposeTray() {
+	if w.trayIcon == nil {
+		return
+	}
+	_ = w.trayIcon.SetVisible(false)
+	_ = w.trayIcon.Dispose()
+	w.trayIcon = nil
 }
 
 // SetHotkeyApplier registers the callback used to apply a new global shortcut.
@@ -338,6 +456,10 @@ func (w *Window) ShowUpdate(u appclipboard.Update) {
 func (w *Window) CheckForUpdates() {
 	go func() {
 		time.Sleep(1 * time.Second)
+		if !w.checking.CompareAndSwap(false, true) {
+			return
+		}
+		defer w.checking.Store(false)
 		w.checkForUpdates()
 	}()
 }
@@ -355,6 +477,10 @@ func (w *Window) checkForUpdates() {
 
 func (w *Window) promptUpdate(rel *update.Release) {
 	w.post(func() {
+		if !w.mw.Visible() {
+			return
+		}
+
 		notes := rel.Notes
 		if notes == "" {
 			notes = "릴리스 노트가 없습니다."
