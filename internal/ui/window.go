@@ -117,6 +117,14 @@ type Window struct {
 	onClosing     func()
 }
 
+// windowTitle returns the caption bar text including the build version.
+func windowTitle() string {
+	if version.IsDev() {
+		return "Clip Translator (dev)"
+	}
+	return "Clip Translator v" + version.Current()
+}
+
 // New builds and shows the main window.
 func New(cfg *config.Config) (*Window, error) {
 	w := &Window{cfg: cfg, initializing: true}
@@ -125,7 +133,7 @@ func New(cfg *config.Config) (*Window, error) {
 
 	err := (d.MainWindow{
 		AssignTo:        &w.mw,
-		Title:           "Clip Translator",
+		Title:           windowTitle(),
 		Icon:            loadAppIcon(),
 		Size:            d.Size{Width: defaultWindowWidth, Height: defaultWindowHeight},
 		MinSize:         d.Size{Width: defaultWindowWidth, Height: defaultWindowMinHeight},
@@ -323,7 +331,7 @@ func (w *Window) ShowUpdate(u appclipboard.Update) {
 // prompts the user to install it. It is a no-op for development builds.
 func (w *Window) CheckForUpdates() {
 	go func() {
-		time.Sleep(3 * time.Second)
+		time.Sleep(1 * time.Second)
 		w.checkForUpdates()
 	}()
 }
