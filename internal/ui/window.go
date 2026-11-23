@@ -425,7 +425,7 @@ func (w *Window) initTray() error {
 	if err := ni.SetIcon(loadAppIcon()); err != nil {
 		return fmt.Errorf("SetIcon: %w", err)
 	}
-	if err := ni.SetToolTip(windowTitle()); err != nil {
+	if err := ni.SetToolTip(windowTitle() + " (우클릭: 종료)"); err != nil {
 		return fmt.Errorf("SetToolTip: %w", err)
 	}
 
@@ -449,8 +449,8 @@ func (w *Window) initTray() error {
 	_ = actions.Add(walk.NewSeparatorAction())
 	_ = actions.Add(quitAction)
 
-	if err := ni.SetVisible(false); err != nil {
-		return fmt.Errorf("SetVisible(false): %w", err)
+	if err := ni.SetVisible(true); err != nil {
+		return fmt.Errorf("SetVisible(true): %w", err)
 	}
 
 	w.trayIcon = ni
@@ -1542,6 +1542,7 @@ func (w *Window) showHelp() {
 			"2. 어디서든 %s 단축키를 누르면 번역이 시작됩니다.\n\n"+
 			"3. 결과가 창에 표시되고 클립보드에 자동으로 복사됩니다.\n\n"+
 			"4. 원하는 곳에서 Ctrl+V로 붙여넣습니다.\n\n"+
+			"5. 종료하려면 트레이 아이콘을 우클릭한 뒤 [종료]를 선택합니다.\n\n"+
 			"알림음으로 진행 상태를 확인할 수 있습니다.\n"+
 			"- 시작: 523→659Hz 상승 두 음\n"+
 			"- 성공: 800Hz\n"+

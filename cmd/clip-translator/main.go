@@ -13,10 +13,22 @@ import (
 	"github.com/genius/clip-translator/internal/clipboard"
 	"github.com/genius/clip-translator/internal/config"
 	"github.com/genius/clip-translator/internal/ollama"
+	"github.com/genius/clip-translator/internal/singleinstance"
 	"github.com/genius/clip-translator/internal/ui"
+	"github.com/genius/clip-translator/internal/update"
 )
 
 func main() {
+	guard, first := singleinstance.Acquire()
+	if !first {
+		defer guard.Release()
+		if !singleinstance.ActivateExisting() {
+			singleinstance.ShowAlreadyRunningMessage()
+		}
+		return
+	}
+	defer guard.Release()
+
 	app, err := walk.InitApp()
 	if err != nil {
 		log.Fatal(err)
@@ -38,6 +50,13 @@ func main() {
 		defer cancel()
 		ollama.Shutdown(ctx)
 	}()
+
+	update.SetBeforeRestart(func() {
+		guard.Release()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		ollama.Shutdown(ctx)
+	})
 
 	if cfg.ProviderName() == config.ProviderGemini {
 		keepAliveCtx, stopKeepAlive := context.WithCancel(context.Background())

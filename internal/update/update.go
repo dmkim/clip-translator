@@ -123,8 +123,18 @@ func Apply(ctx context.Context, rel *Release) error {
 	return nil
 }
 
+var beforeRestart func()
+
+func SetBeforeRestart(fn func()) {
+	beforeRestart = fn
+}
+
 // Restart launches the updated executable and terminates the current process.
 func Restart() error {
+	if beforeRestart != nil {
+		beforeRestart()
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		return err
