@@ -149,19 +149,19 @@ func TestMigrateGeneratedWoWPrompts(t *testing.T) {
 	}
 }
 
-func TestNormalizeLegacyLocalModels(t *testing.T) {
+func TestNormalizePreservesLegacyLocalModels(t *testing.T) {
 	cfg := &Config{
 		LocalModel:  "gemma3:1b",
 		LocalModels: []string{"gemma3:4b", "gemma3:1b"},
 	}
 	cfg.normalize()
 
-	if got := cfg.LocalModelName(); got != DefaultLocalModel {
-		t.Errorf("LocalModelName() = %q, want %q", got, DefaultLocalModel)
+	if got := cfg.LocalModelName(); got != "gemma3:1b" {
+		t.Errorf("LocalModelName() = %q, want gemma3:1b", got)
 	}
 	models := cfg.LocalModelsList()
-	if len(models) != 1 || models[0] != DefaultLocalModel {
-		t.Errorf("LocalModelsList() = %v, want [%s]", models, DefaultLocalModel)
+	if len(models) != 2 || models[0] != "gemma3:4b" || models[1] != "gemma3:1b" {
+		t.Errorf("LocalModelsList() = %v, want [gemma3:4b gemma3:1b]", models)
 	}
 }
 

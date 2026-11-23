@@ -33,6 +33,12 @@ func TestMaxPercentInChunk(t *testing.T) {
 	}
 }
 
+func TestWarmupRequiresModel(t *testing.T) {
+	if err := Warmup(context.Background(), "  ", nil); err == nil {
+		t.Fatal("expected an error for an empty model")
+	}
+}
+
 func TestWarmupModel(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

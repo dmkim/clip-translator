@@ -121,6 +121,46 @@ func Setup(ctx context.Context, model string, progress func(Progress)) (Result, 
 	}, nil
 }
 
+func Warmup(ctx context.Context, model string, progress func(Progress)) error {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return errors.New("로컬 LLM 모델이 설정되지 않았습니다")
+	}
+
+	report := func(message string, percent int) {
+		if progress != nil {
+			progress(Progress{Message: message, Percent: percent})
+		}
+	}
+
+	exe, err := findOllama()
+	if err != nil {
+		return err
+	}
+
+	serverEnv := []string{"OLLAMA_HOST=" + defaultHost}
+	report("Ollama 서버 확인 중...", -1)
+	if err := ensureServer(ctx, exe, defaultHost, defaultAPIBase, serverEnv); err != nil {
+		return err
+	}
+
+	installed, err := hasModel(ctx, BaseURL, model)
+	if err != nil {
+		return err
+	}
+	if !installed {
+		return fmt.Errorf("로컬 LLM 모델이 설치되어 있지 않습니다: %s", model)
+	}
+
+	report(model+" 워밍업 중...", -1)
+	if err := warmupModel(ctx, BaseURL, model); err != nil {
+		return err
+	}
+
+	report(model+" 메모리 유지 설정 중...", -1)
+	return PinModel(ctx, BaseURL, model)
+}
+
 func PinModel(ctx context.Context, baseURL, model string) error {
 	model = strings.TrimSpace(model)
 	if model == "" {

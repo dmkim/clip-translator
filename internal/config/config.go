@@ -441,17 +441,12 @@ func (c *Config) nameTakenLocked(name string) bool {
 	return false
 }
 
-var legacyLocalModels = map[string]bool{
-	"gemma3:4b": true,
-	"gemma3:1b": true,
-}
-
 func (c *Config) normalizeLocalModelsLocked() {
 	models := make([]string, 0, len(c.LocalModels))
 	seen := make(map[string]bool, len(c.LocalModels))
 	for _, model := range c.LocalModels {
 		model = strings.TrimSpace(model)
-		if model == "" || legacyLocalModels[model] || seen[model] {
+		if model == "" || seen[model] {
 			continue
 		}
 		seen[model] = true
@@ -466,7 +461,7 @@ func (c *Config) normalizeLocalModelsLocked() {
 
 	c.LocalModels = models
 	c.LocalModel = strings.TrimSpace(c.LocalModel)
-	if legacyLocalModels[c.LocalModel] || c.LocalModel == "" {
+	if c.LocalModel == "" {
 		c.LocalModel = c.LocalModels[0]
 	}
 	if !seen[c.LocalModel] {

@@ -55,10 +55,11 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
-	Stream      bool          `json:"stream"`
+	Model           string        `json:"model"`
+	Messages        []chatMessage `json:"messages"`
+	Temperature     float64       `json:"temperature"`
+	Stream          bool          `json:"stream"`
+	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
 }
 
 type chatResponse struct {
@@ -91,9 +92,10 @@ func (c *LocalClient) Generate(ctx context.Context, systemPrompt, input string) 
 	messages = append(messages, chatMessage{Role: "user", Content: input})
 
 	payload, err := json.Marshal(chatRequest{
-		Model:       c.model,
-		Messages:    messages,
-		Temperature: 0.3,
+		Model:           c.model,
+		Messages:        messages,
+		Temperature:     0.3,
+		ReasoningEffort: "none",
 	})
 	if err != nil {
 		return "", fmt.Errorf("요청 생성 실패: %w", err)

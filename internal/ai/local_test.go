@@ -18,9 +18,10 @@ var (
 )
 
 type capturedChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
+	Model           string        `json:"model"`
+	Messages        []chatMessage `json:"messages"`
+	Temperature     float64       `json:"temperature"`
+	ReasoningEffort string        `json:"reasoning_effort"`
 }
 
 func TestLocalClientGenerate(t *testing.T) {
@@ -58,6 +59,9 @@ func TestLocalClientGenerate(t *testing.T) {
 	}
 	if captured.Temperature != 0.3 {
 		t.Errorf("temperature = %v, want 0.3", captured.Temperature)
+	}
+	if captured.ReasoningEffort != "none" {
+		t.Errorf("reasoning_effort = %q, want none", captured.ReasoningEffort)
 	}
 	if len(captured.Messages) != 2 {
 		t.Fatalf("messages = %d, want 2", len(captured.Messages))

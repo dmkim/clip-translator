@@ -51,7 +51,12 @@ func main() {
 		ollama.Shutdown(ctx)
 	}()
 
+	var stopLocalWarmup func()
+
 	update.SetBeforeRestart(func() {
+		if stopLocalWarmup != nil {
+			stopLocalWarmup()
+		}
 		guard.Release()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -104,6 +109,23 @@ func main() {
 	})
 	win.SetOnClosing(watcher.Stop)
 	win.CheckForUpdates()
+
+	if cfg.ProviderName() == config.ProviderLocal {
+		warmupCtx, cancelWarmup := context.WithCancel(context.Background())
+		stopLocalWarmup = cancelWarmup
+		defer cancelWarmup()
+
+		go func() {
+			err := ollama.Warmup(warmupCtx, cfg.LocalModelName(), nil)
+			if err == nil || warmupCtx.Err() != nil {
+				return
+			}
+			win.SetStatus(clipboard.StatusUpdate{
+				State:   clipboard.StatusError,
+				Message: "로컬 LLM 준비 실패: " + err.Error(),
+			})
+		}()
+	}
 
 	app.Run()
 }
