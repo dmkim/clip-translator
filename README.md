@@ -86,7 +86,8 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 | `model` | 사용할 Gemini 모델 | `gemini-flash-lite-latest` |
 | `provider` | AI 제공자 (`gemini` 또는 `local`) | `gemini` |
 | `local_base_url` | OpenAI 호환 로컬 서버 주소 | `http://localhost:11434/v1` |
-| `local_model` | 로컬 LLM 모델 이름 | `""` |
+| `local_model` | 현재 선택된 로컬 LLM 모델 | `gemma4:12b` |
+| `local_models` | 자동 설치/설정에서 선택할 모델 목록 | `["gemma4:12b"]` |
 | `local_api_key` | 로컬 서버 인증 키 (선택) | `""` |
 | `local_timeout_seconds` | 로컬 LLM 요청 타임아웃 | `120` |
 | `hotkey` | 글로벌 단축키 | `Ctrl+Shift+T` |
@@ -102,7 +103,7 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 
 **AI 설정 → 제공자**에서 `로컬 LLM (OpenAI 호환)`을 선택한 뒤 **[설정...]**을 누르면 두 가지 방법 중 하나를 고를 수 있습니다.
 
-- **Ollama 자동 설치 (권장)**: winget으로 Ollama를 설치하고 GPU VRAM에 따라 `gemma3:4b` 또는 `gemma3:1b`를 자동 선택
+- **Ollama 자동 설치 (권장)**: winget으로 Ollama를 설치하고 `config.json`의 `local_models` 목록에서 모델을 선택해 다운로드/워밍업
 - **직접 설정**: 이미 설치된 LM Studio/Ollama/llama.cpp 또는 원격 서버의 Base URL과 모델을 직접 입력
 
 OpenAI 호환 `/v1/chat/completions` API를 지원하는 서버라면 별도 구현 없이 사용할 수 있습니다.
@@ -117,26 +118,24 @@ OpenAI 호환 `/v1/chat/completions` API를 지원하는 서버라면 별도 구
 
 **[설정...] → Ollama 자동 설치 (권장)**을 선택하면 winget으로 Ollama를 설치하고 모델을 내려받아 자동 설정합니다. 모델 다운로드 후 실제 **워밍업 요청**까지 성공해야 자동 설치가 완료됩니다. winget(App Installer)이 없거나 설치 권한이 없으면 수동 설치가 필요합니다.
 
-모델 자동 선택 기준:
+자동 설치 화면의 모델 목록은 `config.json`의 `local_models`에서 읽습니다. 기본값은 `["gemma4:12b"]`이며, `local_model`은 현재 선택된 모델입니다. 모델을 추가하려면 `local_models` 배열에 항목을 추가하고 앱을 재시작하세요.
 
-- NVIDIA VRAM 6GB 이상: `gemma3:4b`
-- NVIDIA VRAM 6GB 미만, AMD/Intel, 감지 실패: `gemma3:1b`
-
-자동 설치 화면에서 **자동 (권장) / gemma3:4b / gemma3:1b**를 직접 선택할 수도 있습니다. VRAM이 부족한 환경에서 4b를 강제하면 경고가 표시됩니다.
+```json
+{
+  "local_model": "gemma4:12b",
+  "local_models": ["gemma4:12b"]
+}
+```
 
 ```powershell
 ollama serve
-ollama pull gemma3:4b
-# 또는
-ollama pull gemma3:1b
+ollama pull gemma4:12b
 ```
 
 - **[불러오기]**를 누르면 `GET {base_url}/models`에서 모델 목록을 가져와 선택할 수 있습니다.
 - 모델 이름은 서버에 설치된 모델과 정확히 일치해야 합니다.
 - 원격 서버나 인증이 필요한 서버는 **API Key**를 입력하면 `Authorization: Bearer <key>` 헤더로 전송됩니다.
 - **[테스트]**는 `GET {base_url}/models`로 연결을 확인합니다. 일부 서버가 이 엔드포인트를 지원하지 않으면 경고가 표시되지만 번역은 동작할 수 있습니다.
-- 로컬 LLM은 프리셋과 입력을 하나의 user 메시지로 병합해 전달합니다. Ollama/Gemma의 system 처리 차이를 보완합니다.
-- 기존 기본 WoW 프리셋은 감사/약어 예시가 포함된 새 프롬프트로 자동 업데이트됩니다. 사용자가 수정한 프롬프트는 유지됩니다.
 - 로컬 LLM은 스트리밍을 사용하지 않으며, 응답이 완료될 때까지 기다립니다. 기본 타임아웃은 120초입니다.
 - Ollama 모델은 앱 실행 중 메모리에 유지되며, 앱을 종료하면 모델을 내립니다. 앱이 직접 Ollama 서버를 시작한 경우 서버도 함께 종료합니다.
 

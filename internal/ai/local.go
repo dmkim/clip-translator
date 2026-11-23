@@ -84,11 +84,11 @@ func (c *LocalClient) Generate(ctx context.Context, systemPrompt, input string) 
 		return "", err
 	}
 
-	content := input
-	if system := strings.TrimSpace(systemPrompt); system != "" {
-		content = "[Instructions]\n" + system + "\n\n[Input]\n" + input + "\n\nOutput only the result."
+	messages := make([]chatMessage, 0, 2)
+	if strings.TrimSpace(systemPrompt) != "" {
+		messages = append(messages, chatMessage{Role: "system", Content: systemPrompt})
 	}
-	messages := []chatMessage{{Role: "user", Content: content}}
+	messages = append(messages, chatMessage{Role: "user", Content: input})
 
 	payload, err := json.Marshal(chatRequest{
 		Model:       c.model,

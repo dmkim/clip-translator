@@ -23,6 +23,13 @@ func TestNewDefaultProviderSettings(t *testing.T) {
 	if cfg.LocalAPIKeyValue() != "" {
 		t.Errorf("LocalAPIKeyValue() = %q, want empty", cfg.LocalAPIKeyValue())
 	}
+	if got := cfg.LocalModelName(); got != DefaultLocalModel {
+		t.Errorf("LocalModelName() = %q, want %q", got, DefaultLocalModel)
+	}
+	models := cfg.LocalModelsList()
+	if len(models) != 1 || models[0] != DefaultLocalModel {
+		t.Errorf("LocalModelsList() = %v, want [%s]", models, DefaultLocalModel)
+	}
 }
 
 func TestNormalizeProviderSettings(t *testing.T) {
@@ -117,20 +124,60 @@ func TestNewDefaultWoWPrompt(t *testing.T) {
 	if !ok {
 		t.Fatalf("default profile %q not found", DefaultProfileName)
 	}
-	if profile.Prompt != newWoWPrompt {
-		t.Errorf("default WoW prompt was not updated")
+	if profile.Prompt != oldWoWPrompt {
+		t.Errorf("default WoW prompt was not restored")
 	}
 }
 
-func TestMigrateLegacyWoWPrompt(t *testing.T) {
+func TestMigrateGeneratedWoWPrompts(t *testing.T) {
+	for name, prompt := range map[string]string{
+		"v0.8.1":       previousWoWPrompt,
+		"few-shot":     fewShotWoWPrompt,
+		"intermediate": "북미 WoW 인게임 채팅 번역기.\n예시:\n입력: 감사합니다\n출력: ty",
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := &Config{
+				Profiles:      []Profile{{Name: DefaultProfileName, Prompt: prompt}},
+				ActiveProfile: DefaultProfileName,
+			}
+			cfg.normalize()
+
+			if cfg.Profiles[0].Prompt != oldWoWPrompt {
+				t.Errorf("generated WoW prompt was not reverted")
+			}
+		})
+	}
+}
+
+func TestNormalizeLegacyLocalModels(t *testing.T) {
 	cfg := &Config{
-		Profiles:      []Profile{{Name: "Renamed WoW", Prompt: oldWoWPrompt}},
-		ActiveProfile: "Renamed WoW",
+		LocalModel:  "gemma3:1b",
+		LocalModels: []string{"gemma3:4b", "gemma3:1b"},
 	}
 	cfg.normalize()
 
-	if cfg.Profiles[0].Prompt != newWoWPrompt {
-		t.Errorf("legacy WoW prompt was not migrated")
+	if got := cfg.LocalModelName(); got != DefaultLocalModel {
+		t.Errorf("LocalModelName() = %q, want %q", got, DefaultLocalModel)
+	}
+	models := cfg.LocalModelsList()
+	if len(models) != 1 || models[0] != DefaultLocalModel {
+		t.Errorf("LocalModelsList() = %v, want [%s]", models, DefaultLocalModel)
+	}
+}
+
+func TestNormalizeKeepsCustomLocalModel(t *testing.T) {
+	cfg := &Config{
+		LocalModel:  "my-model",
+		LocalModels: []string{DefaultLocalModel},
+	}
+	cfg.normalize()
+
+	if got := cfg.LocalModelName(); got != "my-model" {
+		t.Errorf("LocalModelName() = %q, want my-model", got)
+	}
+	models := cfg.LocalModelsList()
+	if len(models) != 2 || models[1] != "my-model" {
+		t.Errorf("LocalModelsList() = %v, want custom model appended", models)
 	}
 }
 

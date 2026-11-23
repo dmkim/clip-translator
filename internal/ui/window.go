@@ -732,15 +732,11 @@ func (w *Window) maybeShowLocalRuntimeError(err error) {
 		raw = raw[:1200] + "…"
 	}
 	message := "로컬 LLM 모델 실행이 비정상 종료되었습니다.\n\n" +
-		"이 오류는 메모리 부족뿐 아니라 GPU 드라이버, Ollama/llama.cpp 호환성 문제로도 발생할 수 있습니다.\n" +
-		"gemma3:1b 같은 작은 모델에서도 발생하면 메모리보다 드라이버/호환성 문제일 가능성이 큽니다.\n\n" +
+		"이 오류는 메모리 부족뿐 아니라 GPU 드라이버, Ollama/llama.cpp 호환성 문제로도 발생할 수 있습니다.\n\n" +
 		"해결 방법:\n" +
-		"1. 더 작은 모델 사용 (예: gemma3:1b)\n" +
-		"2. CPU 모드로 전환 후 Ollama 재시작\n" +
-		"   setx CUDA_VISIBLE_DEVICES -1\n" +
-		"   setx OLLAMA_VULKAN false\n" +
-		"3. Ollama와 NVIDIA 드라이버 업데이트\n" +
-		"4. 다른 런타임(LM Studio, llama.cpp) 사용\n\n" +
+		"1. 다른 모델 사용\n" +
+		"2. Ollama와 NVIDIA 드라이버 업데이트\n" +
+		"3. 다른 런타임(LM Studio, llama.cpp) 사용\n\n" +
 		"원본 오류:\n" + raw
 
 	walk.MsgBox(w.mw, "로컬 LLM 실행 오류", message, walk.MsgBoxIconError)
@@ -1116,7 +1112,7 @@ func (w *Window) openLocalSettings() {
 				OnClicked: func() { choice = 1; dlg.Accept() },
 			},
 			d.Label{
-				Text:    "winget으로 Ollama와 gemma3:4b를 설치하고 자동으로 설정합니다.",
+				Text:    "winget으로 Ollama를 설치하고 설정된 모델 목록에서 선택해 자동 설정합니다.",
 				MinSize: d.Size{Width: 380},
 			},
 			d.PushButton{
@@ -1159,32 +1155,39 @@ func (w *Window) openLocalSettings() {
 
 func (w *Window) openOllamaAutoInstall() {
 	var dlg *walk.Dialog
-	var detectionLabel, statusLabel *walk.Label
+	var statusLabel *walk.Label
 	var modelCombo *walk.ComboBox
 	var progress *walk.ProgressBar
 	var startPB, cancelPB *walk.PushButton
 	var cancel context.CancelFunc
-	var detected ollama.ModelChoice
-	var detecting = true
 	var running bool
+	var closed int32
+
+	models := w.cfg.LocalModelsList()
+	if len(models) == 0 {
+		models = []string{"gemma4:12b"}
+	}
+
+	selectedIndex := 0
+	current := w.cfg.LocalModelName()
+	for i, model := range models {
+		if model == current {
+			selectedIndex = i
+			break
+		}
+	}
 
 	err := (d.Dialog{
 		AssignTo:     &dlg,
 		Title:        "Ollama 자동 설치",
-		Size:         d.Size{Width: 440, Height: 330},
-		MinSize:      d.Size{Width: 420, Height: 310},
+		Size:         d.Size{Width: 440, Height: 300},
+		MinSize:      d.Size{Width: 420, Height: 280},
 		Layout:       d.VBox{Spacing: 8},
 		CancelButton: &cancelPB,
 		Children: []d.Widget{
 			d.Label{
-				Text:    "winget으로 Ollama를 설치하고 선택한 모델을 준비합니다.",
+				Text:    "winget으로 Ollama를 설치하고 선택한 모델을 다운로드한 뒤 워밍업합니다.",
 				MinSize: d.Size{Width: 400},
-			},
-			d.Label{
-				AssignTo:     &detectionLabel,
-				Text:         "GPU 확인 중...",
-				EllipsisMode: d.EllipsisEnd,
-				MinSize:      d.Size{Width: 400},
 			},
 			d.Composite{
 				Layout: d.HBox{Spacing: 6, MarginsZero: true},
@@ -1195,15 +1198,16 @@ func (w *Window) openOllamaAutoInstall() {
 					},
 					d.ComboBox{
 						AssignTo: &modelCombo,
-						Model:    []string{"자동 (권장)", ollama.Model4B, ollama.Model1B},
-						MinSize:  d.Size{Width: 200},
+						Editable: true,
+						Model:    models,
+						MinSize:  d.Size{Width: 220},
 					},
 					d.HSpacer{},
 				},
 			},
 			d.Label{
 				AssignTo:     &statusLabel,
-				Text:         "GPU를 확인한 뒤 설치를 시작하세요.",
+				Text:         "모델을 선택하고 [설치 시작]을 누르세요.",
 				EllipsisMode: d.EllipsisEnd,
 				MinSize:      d.Size{Width: 400},
 			},
@@ -1223,27 +1227,17 @@ func (w *Window) openOllamaAutoInstall() {
 						Text:     "설치 시작",
 						MinSize:  d.Size{Width: 88},
 						OnClicked: func() {
-							if detecting || running {
+							if running {
 								return
 							}
 
-							model := detected.Model
-							switch modelCombo.CurrentIndex() {
-							case 1:
-								model = ollama.Model4B
-							case 2:
-								model = ollama.Model1B
-							}
+							model := strings.TrimSpace(modelCombo.Text())
 							if model == "" {
-								model = ollama.Model1B
-							}
-							if model == ollama.Model4B && detected.Model != ollama.Model4B {
-								if walk.MsgBox(dlg, "모델 선택",
-									"GPU의 VRAM이 충분하지 않거나 GPU를 감지하지 못했습니다.\n"+
-										"gemma3:4b는 메모리 부족으로 실패할 수 있습니다.\n\n계속할까요?",
-									walk.MsgBoxYesNo|walk.MsgBoxIconWarning) != walk.DlgCmdYes {
-									return
+								index := modelCombo.CurrentIndex()
+								if index < 0 || index >= len(models) {
+									index = 0
 								}
+								model = models[index]
 							}
 
 							running = true
@@ -1339,35 +1333,33 @@ func (w *Window) openOllamaAutoInstall() {
 		return
 	}
 
-	startPB.SetEnabled(false)
-	cancelPB.SetEnabled(false)
-	modelCombo.SetEnabled(false)
-	_ = modelCombo.SetCurrentIndex(0)
+	_ = modelCombo.SetCurrentIndex(selectedIndex)
+	_ = modelCombo.SetText(models[selectedIndex])
 
 	dlg.Closing().Attach(func(canceled *bool, reason walk.CloseReason) {
-		if detecting || running {
+		if running {
 			*canceled = true
-			if running {
-				if cancel != nil {
-					cancel()
-				}
-				cancelPB.SetEnabled(false)
-				statusLabel.SetText("취소 중...")
+			if cancel != nil {
+				cancel()
 			}
+			cancelPB.SetEnabled(false)
+			statusLabel.SetText("취소 중...")
+			return
 		}
+		atomic.StoreInt32(&closed, 1)
 	})
 
 	go func() {
-		choice := ollama.DetectModel()
+		time.Sleep(150 * time.Millisecond)
+		if atomic.LoadInt32(&closed) != 0 {
+			return
+		}
 		dlg.Synchronize(func() {
-			detecting = false
-			detected = choice
-			detectionLabel.SetText(choice.Description())
-			statusLabel.SetText("설치할 모델을 확인하고 [설치 시작]을 누르세요.")
-			_ = modelCombo.SetCurrentIndex(0)
-			modelCombo.SetEnabled(true)
-			startPB.SetEnabled(true)
-			cancelPB.SetEnabled(true)
+			if atomic.LoadInt32(&closed) != 0 {
+				return
+			}
+			_ = modelCombo.SetCurrentIndex(selectedIndex)
+			_ = modelCombo.SetText(models[selectedIndex])
 		})
 	}()
 
@@ -1403,7 +1395,7 @@ func (w *Window) openManualLocalSettings() {
 						AssignTo:      &modelEdit,
 						Editable:      true,
 						StretchFactor: 1,
-						Model:         []string{},
+						Model:         w.cfg.LocalModelsList(),
 					},
 					d.PushButton{
 						AssignTo: &loadModelsPB,

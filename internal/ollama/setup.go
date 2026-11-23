@@ -22,130 +22,12 @@ import (
 
 const (
 	BaseURL        = "http://127.0.0.1:11434/v1"
-	Model4B        = "gemma3:4b"
-	Model1B        = "gemma3:1b"
 	TimeoutSeconds = 120
 
-	apiBase          = "http://127.0.0.1:11434"
-	minVRAMFor4B     = 6 * 1024
-	nvidiaSMITimeout = 3 * time.Second
-	warmupTimeout    = 5 * time.Minute
+	defaultHost    = "127.0.0.1:11434"
+	defaultAPIBase = "http://127.0.0.1:11434"
+	warmupTimeout  = 5 * time.Minute
 )
-
-type Hardware struct {
-	GPU      string
-	VRAMMB   int
-	Detected bool
-}
-
-type ModelChoice struct {
-	Model    string
-	Hardware Hardware
-	Reason   string
-}
-
-func (c ModelChoice) Description() string {
-	if !c.Hardware.Detected {
-		return "GPU 자동 감지 불가 → 안정성을 위해 " + c.Model + " 선택"
-	}
-	return fmt.Sprintf("%s · VRAM %dMB → %s 선택", c.Hardware.GPU, c.Hardware.VRAMMB, c.Model)
-}
-
-func DetectModel() ModelChoice {
-	hardware := DetectHardware()
-	model := selectModel(hardware)
-	reason := "GPU 자동 감지 불가"
-	if hardware.Detected {
-		if hardware.VRAMMB >= minVRAMFor4B {
-			reason = "VRAM 6GB 이상"
-		} else {
-			reason = "VRAM 6GB 미만"
-		}
-	}
-	return ModelChoice{Model: model, Hardware: hardware, Reason: reason}
-}
-
-func DetectHardware() Hardware {
-	path, err := findNvidiaSMI()
-	if err != nil {
-		return Hardware{}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), nvidiaSMITimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, path, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
-	hideWindow(cmd)
-	output, err := cmd.Output()
-	if err != nil {
-		return Hardware{}
-	}
-	return parseNvidiaSMI(string(output))
-}
-
-func parseNvidiaSMI(output string) Hardware {
-	var best Hardware
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
-		if line == "" {
-			continue
-		}
-		index := strings.LastIndex(line, ",")
-		if index < 0 {
-			continue
-		}
-		name := strings.TrimSpace(line[:index])
-		vram, err := parseMemoryMB(line[index+1:])
-		if err != nil || vram <= 0 {
-			continue
-		}
-		if !best.Detected || vram > best.VRAMMB {
-			best = Hardware{GPU: name, VRAMMB: vram, Detected: true}
-		}
-	}
-	return best
-}
-
-func selectModel(hardware Hardware) string {
-	if hardware.Detected && hardware.VRAMMB >= minVRAMFor4B {
-		return Model4B
-	}
-	return Model1B
-}
-
-func findNvidiaSMI() (string, error) {
-	if path, err := exec.LookPath("nvidia-smi.exe"); err == nil {
-		return path, nil
-	}
-	var candidates []string
-	if base := strings.TrimSpace(os.Getenv("SystemRoot")); base != "" {
-		candidates = append(candidates, filepath.Join(base, "System32", "nvidia-smi.exe"))
-	}
-	if base := strings.TrimSpace(os.Getenv("ProgramFiles")); base != "" {
-		candidates = append(candidates, filepath.Join(base, "NVIDIA Corporation", "NVSMI", "nvidia-smi.exe"))
-	}
-	for _, path := range candidates {
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			return path, nil
-		}
-	}
-	return "", errors.New("nvidia-smi를 찾을 수 없습니다")
-}
-
-func parseMemoryMB(value string) (int, error) {
-	value = strings.TrimSpace(value)
-	digits := ""
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			break
-		}
-		digits += string(r)
-	}
-	if digits == "" {
-		return 0, errors.New("메모리 값을 해석할 수 없습니다")
-	}
-	return strconv.Atoi(digits)
-}
 
 type Progress struct {
 	Message string
@@ -161,7 +43,7 @@ type Result struct {
 func Setup(ctx context.Context, model string, progress func(Progress)) (Result, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {
-		model = DetectModel().Model
+		return Result{}, errors.New("모델을 선택하세요")
 	}
 
 	report := func(message string, percent int) {
@@ -189,25 +71,26 @@ func Setup(ctx context.Context, model string, progress func(Progress)) (Result, 
 		}
 	}
 
+	serverEnv := []string{"OLLAMA_HOST=" + defaultHost}
 	report("Ollama 서버 확인 중...", -1)
-	if !serverReady(ctx) {
+	if !serverReady(ctx, defaultAPIBase) {
 		report("Ollama 서버 시작 중...", -1)
-		if err := startServer(exe); err != nil && !serverReady(ctx) {
-			return Result{}, fmt.Errorf("Ollama 서버를 시작하지 못했습니다: %w", err)
+	}
+	if err := ensureServer(ctx, exe, defaultHost, defaultAPIBase, serverEnv); err != nil {
+		if ctx.Err() != nil {
+			return Result{}, ctx.Err()
 		}
-		if err := waitServer(ctx); err != nil {
-			return Result{}, err
-		}
+		return Result{}, err
 	}
 
 	report(model+" 모델 확인 중...", -1)
-	installed, err := hasModel(ctx, model)
+	installed, err := hasModel(ctx, BaseURL, model)
 	if err != nil {
 		return Result{}, err
 	}
 	if !installed {
 		report(model+" 모델 다운로드 중...", -1)
-		if err := pullModel(ctx, exe, model, report); err != nil {
+		if err := pullModel(ctx, exe, model, serverEnv, report); err != nil {
 			return Result{}, err
 		}
 	}
@@ -266,9 +149,7 @@ func UnloadModel(ctx context.Context, baseURL, model string) error {
 }
 
 func Shutdown(ctx context.Context) {
-	if stopOwnedServer() {
-		return
-	}
+	stopOwnedServers()
 
 	pinnedMu.Lock()
 	baseURL, model := pinnedBaseURL, pinnedModel
@@ -468,18 +349,32 @@ func installOllama(ctx context.Context, winget string) error {
 }
 
 var (
-	serverMu      sync.Mutex
-	serverProcess *os.Process
+	serverMu        sync.Mutex
+	serverProcesses = make(map[string]*os.Process)
+	ensureMu        sync.Mutex
 
 	pinnedMu      sync.Mutex
 	pinnedBaseURL string
 	pinnedModel   string
 )
 
-func startServer(exe string) error {
+func ensureServer(ctx context.Context, exe, host, apiURL string, env []string) error {
+	ensureMu.Lock()
+	defer ensureMu.Unlock()
+
+	if serverReady(ctx, apiURL) {
+		return nil
+	}
+	if err := startServer(exe, host, env); err != nil && !serverReady(ctx, apiURL) {
+		return fmt.Errorf("Ollama 서버를 시작하지 못했습니다: %w", err)
+	}
+	return waitServer(ctx, apiURL)
+}
+
+func startServer(exe, host string, env []string) error {
 	cmd := exec.Command(exe, "serve")
 	hideWindow(cmd)
-	cmd.Env = withEnv(os.Environ(), "OLLAMA_HOST", "127.0.0.1:11434")
+	cmd.Env = mergeEnv(os.Environ(), env)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -487,34 +382,36 @@ func startServer(exe string) error {
 	}
 
 	serverMu.Lock()
-	serverProcess = cmd.Process
+	serverProcesses[host] = cmd.Process
 	serverMu.Unlock()
 
 	go func() {
 		_ = cmd.Wait()
 		serverMu.Lock()
-		if serverProcess == cmd.Process {
-			serverProcess = nil
+		if serverProcesses[host] == cmd.Process {
+			delete(serverProcesses, host)
 		}
 		serverMu.Unlock()
 	}()
 	return nil
 }
 
-func stopOwnedServer() bool {
+func stopOwnedServers() {
 	serverMu.Lock()
-	process := serverProcess
-	serverProcess = nil
-	serverMu.Unlock()
-	if process == nil {
-		return false
+	processes := make([]*os.Process, 0, len(serverProcesses))
+	for host, process := range serverProcesses {
+		processes = append(processes, process)
+		delete(serverProcesses, host)
 	}
-	killProcessTree(process)
-	return true
+	serverMu.Unlock()
+
+	for _, process := range processes {
+		killProcessTree(process)
+	}
 }
 
-func serverReady(ctx context.Context) bool {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/api/tags", nil)
+func serverReady(ctx context.Context, apiURL string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"/api/tags", nil)
 	if err != nil {
 		return false
 	}
@@ -528,10 +425,10 @@ func serverReady(ctx context.Context) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func waitServer(ctx context.Context) error {
+func waitServer(ctx context.Context, apiURL string) error {
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		if serverReady(ctx) {
+		if serverReady(ctx, apiURL) {
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -545,8 +442,8 @@ func waitServer(ctx context.Context) error {
 	}
 }
 
-func hasModel(ctx context.Context, model string) (bool, error) {
-	models, err := ai.ListLocalModels(ctx, BaseURL, "")
+func hasModel(ctx context.Context, baseURL, model string) (bool, error) {
+	models, err := ai.ListLocalModels(ctx, baseURL, "")
 	if err != nil {
 		return false, fmt.Errorf("모델 목록을 확인하지 못했습니다: %w", err)
 	}
@@ -558,13 +455,13 @@ func hasModel(ctx context.Context, model string) (bool, error) {
 	return false, nil
 }
 
-func pullModel(ctx context.Context, exe, model string, report func(string, int)) error {
+func pullModel(ctx context.Context, exe, model string, extraEnv []string, report func(string, int)) error {
 	out := newTailWriter(16 << 10)
 	out.onPercent = func(percent int) {
 		report(model+" 모델 다운로드 중...", percent)
 	}
 
-	err := runProcess(ctx, exe, []string{"pull", model}, nil, out)
+	err := runProcess(ctx, exe, []string{"pull", model}, extraEnv, out)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -597,7 +494,7 @@ func runProcess(ctx context.Context, name string, args, extraEnv []string, out i
 	cmd := exec.Command(name, args...)
 	hideWindow(cmd)
 	if len(extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), extraEnv...)
+		cmd.Env = mergeEnv(os.Environ(), extraEnv)
 	}
 	if out != nil {
 		cmd.Stdout = out
@@ -644,14 +541,27 @@ func hideWindow(cmd *exec.Cmd) {
 }
 
 func withEnv(env []string, key, value string) []string {
-	prefix := strings.ToUpper(key) + "="
-	result := make([]string, 0, len(env)+1)
-	for _, item := range env {
-		if !strings.HasPrefix(strings.ToUpper(item), prefix) {
-			result = append(result, item)
+	return mergeEnv(env, []string{key + "=" + value})
+}
+
+func mergeEnv(env, overrides []string) []string {
+	keys := make(map[string]bool, len(overrides))
+	for _, item := range overrides {
+		if index := strings.IndexByte(item, '='); index > 0 {
+			keys[strings.ToUpper(item[:index])] = true
 		}
 	}
-	return append(result, key+"="+value)
+
+	result := make([]string, 0, len(env)+len(overrides))
+	for _, item := range env {
+		if index := strings.IndexByte(item, '='); index > 0 {
+			if keys[strings.ToUpper(item[:index])] {
+				continue
+			}
+		}
+		result = append(result, item)
+	}
+	return append(result, overrides...)
 }
 
 func cleanOutput(text string) string {

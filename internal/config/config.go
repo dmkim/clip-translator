@@ -31,6 +31,7 @@ type Config struct {
 	Provider            string    `json:"provider"`
 	LocalBaseURL        string    `json:"local_base_url"`
 	LocalModel          string    `json:"local_model"`
+	LocalModels         []string  `json:"local_models"`
 	LocalAPIKey         string    `json:"local_api_key"`
 	LocalTimeoutSeconds int       `json:"local_timeout_seconds"`
 	Hotkey              string    `json:"hotkey"`
@@ -204,6 +205,12 @@ func (c *Config) LocalTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func (c *Config) LocalModelsList() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return append([]string(nil), c.LocalModels...)
+}
+
 func (c *Config) SetAIConfig(provider, baseURL, model, apiKey string, timeoutSeconds int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -213,6 +220,9 @@ func (c *Config) SetAIConfig(provider, baseURL, model, apiKey string, timeoutSec
 	c.Provider = normalizeProvider(provider)
 	c.LocalBaseURL = strings.TrimSpace(baseURL)
 	c.LocalModel = strings.TrimSpace(model)
+	if c.LocalModel != "" && !containsString(c.LocalModels, c.LocalModel) {
+		c.LocalModels = append(c.LocalModels, c.LocalModel)
+	}
 	c.LocalAPIKey = strings.TrimSpace(apiKey)
 	c.LocalTimeoutSeconds = timeoutSeconds
 }
@@ -431,12 +441,68 @@ func (c *Config) nameTakenLocked(name string) bool {
 	return false
 }
 
-func (c *Config) migrateWoWPromptLocked() {
-	for i := range c.Profiles {
-		if c.Profiles[i].Prompt == oldWoWPrompt {
-			c.Profiles[i].Prompt = newWoWPrompt
+var legacyLocalModels = map[string]bool{
+	"gemma3:4b": true,
+	"gemma3:1b": true,
+}
+
+func (c *Config) normalizeLocalModelsLocked() {
+	models := make([]string, 0, len(c.LocalModels))
+	seen := make(map[string]bool, len(c.LocalModels))
+	for _, model := range c.LocalModels {
+		model = strings.TrimSpace(model)
+		if model == "" || legacyLocalModels[model] || seen[model] {
+			continue
+		}
+		seen[model] = true
+		models = append(models, model)
+	}
+	if len(models) == 0 {
+		models = defaultLocalModels()
+		for _, model := range models {
+			seen[model] = true
 		}
 	}
+
+	c.LocalModels = models
+	c.LocalModel = strings.TrimSpace(c.LocalModel)
+	if legacyLocalModels[c.LocalModel] || c.LocalModel == "" {
+		c.LocalModel = c.LocalModels[0]
+	}
+	if !seen[c.LocalModel] {
+		c.LocalModels = append(c.LocalModels, c.LocalModel)
+	}
+}
+
+func containsString(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) migrateWoWPromptLocked() {
+	for i := range c.Profiles {
+		if isModifiedWoWPrompt(c.Profiles[i].Prompt) {
+			c.Profiles[i].Prompt = oldWoWPrompt
+		}
+	}
+}
+
+func isModifiedWoWPrompt(prompt string) bool {
+	switch prompt {
+	case previousWoWPrompt, fewShotWoWPrompt:
+		return true
+	}
+	if !strings.Contains(prompt, "WoW") {
+		return false
+	}
+	return strings.Contains(prompt, "절대 대화로 응답하지 말") ||
+		strings.Contains(prompt, "입력: 감사합니다") ||
+		strings.Contains(prompt, "곧 돌아올게") ||
+		strings.Contains(prompt, "천만에요")
 }
 
 func (c *Config) applyDefaults() {
@@ -445,6 +511,7 @@ func (c *Config) applyDefaults() {
 		c.Model = tpl.Model
 		c.LocalBaseURL = tpl.LocalBaseURL
 		c.LocalModel = tpl.LocalModel
+		c.LocalModels = tpl.LocalModels
 		c.LocalTimeoutSeconds = tpl.LocalTimeoutSeconds
 		c.Hotkey = tpl.Hotkey
 		c.AlwaysOnTop = tpl.AlwaysOnTop
@@ -456,6 +523,8 @@ func (c *Config) applyDefaults() {
 		c.Hotkey = DefaultHotkey
 		c.Model = DefaultModel
 		c.LocalBaseURL = DefaultLocalBaseURL
+		c.LocalModel = DefaultLocalModel
+		c.LocalModels = defaultLocalModels()
 		c.LocalTimeoutSeconds = DefaultLocalTimeoutSeconds
 		c.ActiveProfile = DefaultProfileName
 		c.Profiles = defaultProfiles()
@@ -487,7 +556,7 @@ func (c *Config) normalizeLocked() {
 	if c.LocalBaseURL == "" {
 		c.LocalBaseURL = DefaultLocalBaseURL
 	}
-	c.LocalModel = strings.TrimSpace(c.LocalModel)
+	c.normalizeLocalModelsLocked()
 	c.LocalAPIKey = strings.TrimSpace(c.LocalAPIKey)
 	if c.LocalTimeoutSeconds <= 0 {
 		c.LocalTimeoutSeconds = DefaultLocalTimeoutSeconds

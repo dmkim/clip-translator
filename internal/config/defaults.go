@@ -17,13 +17,14 @@ const (
 	ProviderLocal  = "local"
 
 	DefaultLocalBaseURL        = "http://localhost:11434/v1"
+	DefaultLocalModel          = "gemma4:12b"
 	DefaultLocalTimeoutSeconds = 120
 
 	oldWoWPrompt = "북미 WoW 인게임 채팅 번역기. 한국어를 비영어권 유저가 쓰기 좋은 자연스럽고 매너 있는 캐주얼 영어로 번역하라.\r\n" +
 		"- 과한 슬랭·밈 금지. 보편적 약어(ty, np, mb, brb, omw, g2g, inv, oom, afk, gg)만 문맥에 맞게 사용.\r\n" +
 		"- 마침표·대문자 최소화. 부연 설명이나 따옴표 없이 채팅에 바로 쓸 영어 한 문장만 출력."
 
-	newWoWPrompt = "북미 WoW 인게임 채팅 번역기. 입력된 한국어를 북미 유저가 실제로 쓰는 자연스러운 캐주얼 영어로 번역하라.\r\n" +
+	previousWoWPrompt = "북미 WoW 인게임 채팅 번역기. 입력된 한국어를 북미 유저가 실제로 쓰는 자연스러운 캐주얼 영어로 번역하라.\r\n" +
 		"- 절대 대화로 응답하지 말고 번역문만 출력.\r\n" +
 		"- \"감사합니다\", \"고마워\" → \"ty\"\r\n" +
 		"- \"천만에요\", \"괜찮아\" → \"np\"\r\n" +
@@ -32,6 +33,16 @@ const (
 		"- \"미안\" → \"sry\"\r\n" +
 		"- 과한 슬랭·밈 금지. 보편적 약어(ty, np, mb, brb, omw, g2g, inv, oom, afk, gg)만 문맥에 맞게 사용.\r\n" +
 		"- 마침표·대문자 최소화. 부연 설명이나 따옴표 없이 채팅에 바로 쓸 영어 한 문장만 출력."
+
+	fewShotWoWPrompt = "북미 WoW 인게임 채팅 번역기. 입력된 한국어를 아래 예시처럼 인게임 영어로만 번역하라. 절대 대화로 응답하지 말 것.\r\n" +
+		"예시:\r\n" +
+		"입력: 감사합니다\r\n출력: ty\r\n" +
+		"입력: 고마워\r\n출력: ty\r\n" +
+		"입력: 천만에요\r\n출력: np\r\n" +
+		"입력: 곧 돌아올게\r\n출력: brb\r\n" +
+		"입력: 잠시만\r\n출력: sec\r\n" +
+		"입력: 미안\r\n출력: sry\r\n" +
+		"규칙: \"감사합니다/고마워\"는 반드시 ty, \"천만에요/괜찮아\"는 np로 번역. 과한 슬랭·밈 금지. 보편적 약어(ty, np, mb, brb, omw, g2g, inv, oom, afk, gg)만 문맥에 맞게 사용. 마침표·대문자 최소화. 설명이나 따옴표 없이 번역문 한 문장만 출력."
 )
 
 // default.json is the template written when config.json does not exist. It
@@ -45,6 +56,7 @@ type bundledTemplate struct {
 	Model               string    `json:"model"`
 	LocalBaseURL        string    `json:"local_base_url"`
 	LocalModel          string    `json:"local_model"`
+	LocalModels         []string  `json:"local_models"`
 	LocalTimeoutSeconds int       `json:"local_timeout_seconds"`
 	Hotkey              string    `json:"hotkey"`
 	AlwaysOnTop         bool      `json:"always_on_top"`
@@ -64,11 +76,15 @@ func bundledDefaults() (bundledTemplate, bool) {
 	return tpl, true
 }
 
+func defaultLocalModels() []string {
+	return []string{DefaultLocalModel}
+}
+
 func defaultProfiles() []Profile {
 	return []Profile{
 		{
 			Name:   DefaultProfileName,
-			Prompt: newWoWPrompt,
+			Prompt: oldWoWPrompt,
 		},
 		{
 			Name: "비즈니스/슬랙 영작",
