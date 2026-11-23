@@ -18,6 +18,20 @@ const (
 
 	DefaultLocalBaseURL        = "http://localhost:11434/v1"
 	DefaultLocalTimeoutSeconds = 120
+
+	oldWoWPrompt = "북미 WoW 인게임 채팅 번역기. 한국어를 비영어권 유저가 쓰기 좋은 자연스럽고 매너 있는 캐주얼 영어로 번역하라.\r\n" +
+		"- 과한 슬랭·밈 금지. 보편적 약어(ty, np, mb, brb, omw, g2g, inv, oom, afk, gg)만 문맥에 맞게 사용.\r\n" +
+		"- 마침표·대문자 최소화. 부연 설명이나 따옴표 없이 채팅에 바로 쓸 영어 한 문장만 출력."
+
+	newWoWPrompt = "북미 WoW 인게임 채팅 번역기. 입력된 한국어를 북미 유저가 실제로 쓰는 자연스러운 캐주얼 영어로 번역하라.\r\n" +
+		"- 절대 대화로 응답하지 말고 번역문만 출력.\r\n" +
+		"- \"감사합니다\", \"고마워\" → \"ty\"\r\n" +
+		"- \"천만에요\", \"괜찮아\" → \"np\"\r\n" +
+		"- \"곧 돌아올게\" → \"brb\"\r\n" +
+		"- \"잠시만\" → \"sec\"\r\n" +
+		"- \"미안\" → \"sry\"\r\n" +
+		"- 과한 슬랭·밈 금지. 보편적 약어(ty, np, mb, brb, omw, g2g, inv, oom, afk, gg)만 문맥에 맞게 사용.\r\n" +
+		"- 마침표·대문자 최소화. 부연 설명이나 따옴표 없이 채팅에 바로 쓸 영어 한 문장만 출력."
 )
 
 // default.json is the template written when config.json does not exist. It
@@ -53,12 +67,8 @@ func bundledDefaults() (bundledTemplate, bool) {
 func defaultProfiles() []Profile {
 	return []Profile{
 		{
-			Name: "WoW 북미 서버 채팅",
-			Prompt: "You are an expert English localization assistant specialized in World of Warcraft (NA realms). " +
-				"Translate the Korean input into natural, native-style English that NA WoW players actually use in-game. " +
-				"Use common shorthand/slang (np, ty, mb, afk, brb, pull, cc, kick, int, dispell, oom, lol, rip, gg). " +
-				"Keep it casual, punchy, lowercase preference, minimal punctuation. " +
-				"Output ONLY the single best translated sentence ready to paste into chat.",
+			Name:   DefaultProfileName,
+			Prompt: newWoWPrompt,
 		},
 		{
 			Name: "비즈니스/슬랙 영작",

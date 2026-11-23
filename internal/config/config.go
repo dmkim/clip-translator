@@ -431,6 +431,14 @@ func (c *Config) nameTakenLocked(name string) bool {
 	return false
 }
 
+func (c *Config) migrateWoWPromptLocked() {
+	for i := range c.Profiles {
+		if c.Profiles[i].Prompt == oldWoWPrompt {
+			c.Profiles[i].Prompt = newWoWPrompt
+		}
+	}
+}
+
 func (c *Config) applyDefaults() {
 	if tpl, ok := bundledDefaults(); ok {
 		c.Provider = tpl.Provider
@@ -492,6 +500,7 @@ func (c *Config) normalizeLocked() {
 			c.Profiles[i].Name = fmt.Sprintf("프리셋 %d", i+1)
 		}
 	}
+	c.migrateWoWPromptLocked()
 	if c.ActiveProfile == "" {
 		c.ActiveProfile = c.Profiles[0].Name
 		return

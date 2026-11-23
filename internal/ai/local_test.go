@@ -59,14 +59,12 @@ func TestLocalClientGenerate(t *testing.T) {
 	if captured.Temperature != 0.3 {
 		t.Errorf("temperature = %v, want 0.3", captured.Temperature)
 	}
-	if len(captured.Messages) != 2 {
-		t.Fatalf("messages = %d, want 2", len(captured.Messages))
+	if len(captured.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(captured.Messages))
 	}
-	if captured.Messages[0].Role != "system" || captured.Messages[0].Content != "system prompt" {
-		t.Errorf("system message = %+v", captured.Messages[0])
-	}
-	if captured.Messages[1].Role != "user" || captured.Messages[1].Content != "user input" {
-		t.Errorf("user message = %+v", captured.Messages[1])
+	wantContent := "[Instructions]\nsystem prompt\n\n[Input]\nuser input\n\nOutput only the result."
+	if captured.Messages[0].Role != "user" || captured.Messages[0].Content != wantContent {
+		t.Errorf("user message = %+v, want content %q", captured.Messages[0], wantContent)
 	}
 	if client.Timeout() != 5*time.Second {
 		t.Errorf("Timeout() = %v, want 5s", client.Timeout())

@@ -110,3 +110,38 @@ func TestSetAIConfigRejectsInvalidTimeout(t *testing.T) {
 		t.Errorf("LocalTimeout() = %v, want default", got)
 	}
 }
+
+func TestNewDefaultWoWPrompt(t *testing.T) {
+	cfg := NewDefault()
+	profile, ok := cfg.Profile(DefaultProfileName)
+	if !ok {
+		t.Fatalf("default profile %q not found", DefaultProfileName)
+	}
+	if profile.Prompt != newWoWPrompt {
+		t.Errorf("default WoW prompt was not updated")
+	}
+}
+
+func TestMigrateLegacyWoWPrompt(t *testing.T) {
+	cfg := &Config{
+		Profiles:      []Profile{{Name: "Renamed WoW", Prompt: oldWoWPrompt}},
+		ActiveProfile: "Renamed WoW",
+	}
+	cfg.normalize()
+
+	if cfg.Profiles[0].Prompt != newWoWPrompt {
+		t.Errorf("legacy WoW prompt was not migrated")
+	}
+}
+
+func TestPreserveCustomWoWPrompt(t *testing.T) {
+	cfg := &Config{
+		Profiles:      []Profile{{Name: DefaultProfileName, Prompt: "custom prompt"}},
+		ActiveProfile: DefaultProfileName,
+	}
+	cfg.normalize()
+
+	if cfg.Profiles[0].Prompt != "custom prompt" {
+		t.Errorf("custom prompt was overwritten: %q", cfg.Profiles[0].Prompt)
+	}
+}
