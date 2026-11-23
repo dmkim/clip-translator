@@ -12,6 +12,7 @@ import (
 	"github.com/genius/clip-translator/internal/ai"
 	"github.com/genius/clip-translator/internal/clipboard"
 	"github.com/genius/clip-translator/internal/config"
+	"github.com/genius/clip-translator/internal/ollama"
 	"github.com/genius/clip-translator/internal/ui"
 )
 
@@ -31,6 +32,12 @@ func main() {
 	if cfg == nil {
 		cfg = config.NewDefault()
 	}
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		ollama.Shutdown(ctx)
+	}()
 
 	if cfg.ProviderName() == config.ProviderGemini {
 		keepAliveCtx, stopKeepAlive := context.WithCancel(context.Background())

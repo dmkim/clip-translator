@@ -98,7 +98,12 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 
 ## 로컬 LLM
 
-**AI 설정 → 제공자**에서 `로컬 LLM (OpenAI 호환)`을 선택한 뒤 **[설정...]**에서 서버 주소와 모델을 지정합니다. OpenAI 호환 `/v1/chat/completions` API를 지원하는 서버라면 별도 구현 없이 사용할 수 있습니다.
+**AI 설정 → 제공자**에서 `로컬 LLM (OpenAI 호환)`을 선택한 뒤 **[설정...]**을 누르면 두 가지 방법 중 하나를 고를 수 있습니다.
+
+- **Ollama 자동 설치 (권장)**: winget으로 Ollama를 설치하고 GPU VRAM에 따라 `gemma3:4b` 또는 `gemma3:1b`를 자동 선택
+- **직접 설정**: 이미 설치된 LM Studio/Ollama/llama.cpp 또는 원격 서버의 Base URL과 모델을 직접 입력
+
+OpenAI 호환 `/v1/chat/completions` API를 지원하는 서버라면 별도 구현 없이 사용할 수 있습니다.
 
 | 런타임 | Base URL | 예시 |
 | --- | --- | --- |
@@ -106,11 +111,22 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 | LM Studio | `http://localhost:1234/v1` | Local Server 활성화 |
 | llama.cpp | `http://localhost:8080/v1` | `llama-server -m model.gguf --port 8080` |
 
-Ollama 예시:
+### Windows 자동 설치 (winget)
+
+**[설정...] → Ollama 자동 설치 (권장)**을 선택하면 winget으로 Ollama를 설치하고 모델을 내려받아 자동 설정합니다. 모델 다운로드 후 실제 **워밍업 요청**까지 성공해야 자동 설치가 완료됩니다. winget(App Installer)이 없거나 설치 권한이 없으면 수동 설치가 필요합니다.
+
+모델 자동 선택 기준:
+
+- NVIDIA VRAM 6GB 이상: `gemma3:4b`
+- NVIDIA VRAM 6GB 미만, AMD/Intel, 감지 실패: `gemma3:1b`
+
+자동 설치 화면에서 **자동 (권장) / gemma3:4b / gemma3:1b**를 직접 선택할 수도 있습니다. VRAM이 부족한 환경에서 4b를 강제하면 경고가 표시됩니다.
 
 ```powershell
 ollama serve
-ollama pull qwen2.5:7b-instruct
+ollama pull gemma3:4b
+# 또는
+ollama pull gemma3:1b
 ```
 
 - **[불러오기]**를 누르면 `GET {base_url}/models`에서 모델 목록을 가져와 선택할 수 있습니다.
@@ -118,6 +134,7 @@ ollama pull qwen2.5:7b-instruct
 - 원격 서버나 인증이 필요한 서버는 **API Key**를 입력하면 `Authorization: Bearer <key>` 헤더로 전송됩니다.
 - **[테스트]**는 `GET {base_url}/models`로 연결을 확인합니다. 일부 서버가 이 엔드포인트를 지원하지 않으면 경고가 표시되지만 번역은 동작할 수 있습니다.
 - 로컬 LLM은 스트리밍을 사용하지 않으며, 응답이 완료될 때까지 기다립니다. 기본 타임아웃은 120초입니다.
+- Ollama 모델은 앱 실행 중 메모리에 유지되며, 앱을 종료하면 모델을 내립니다. 앱이 직접 Ollama 서버를 시작한 경우 서버도 함께 종료합니다.
 
 ## 자동 업데이트
 

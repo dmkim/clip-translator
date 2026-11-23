@@ -16,6 +16,7 @@ import (
 
 	"github.com/genius/clip-translator/internal/ai"
 	"github.com/genius/clip-translator/internal/config"
+	"github.com/genius/clip-translator/internal/ollama"
 )
 
 // Status describes the state shown in the GUI status bar.
@@ -261,6 +262,23 @@ func (w *Watcher) process() {
 		w.onUpdate(Update{Input: input, Output: output})
 	}
 	w.status(StatusIdle, "")
+	w.pinLocalModel()
+}
+
+func (w *Watcher) pinLocalModel() {
+	if w.cfg.ProviderName() != config.ProviderLocal {
+		return
+	}
+	baseURL := w.cfg.LocalURL()
+	model := w.cfg.LocalModelName()
+	if model == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = ollama.PinModel(ctx, baseURL, model)
+	}()
 }
 
 func newTranslator(cfg *config.Config) ai.Translator {
