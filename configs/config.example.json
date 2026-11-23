@@ -1,6 +1,11 @@
 {
     "api_key":  "",
     "model":  "gemini-flash-lite-latest",
+    "provider":  "gemini",
+    "local_base_url":  "http://localhost:11434/v1",
+    "local_model":  "",
+    "local_api_key":  "",
+    "local_timeout_seconds":  120,
     "hotkey":  "Ctrl+Shift+T",
     "always_on_top":  false,
     "active_profile":  "WoW 북미 서버 채팅",

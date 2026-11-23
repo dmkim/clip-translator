@@ -241,9 +241,9 @@ func (w *Watcher) process() {
 	}
 
 	profile := w.cfg.Active()
-	client := ai.New(w.cfg.APIKeyValue(), w.cfg.ModelName())
+	client := newTranslator(w.cfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), ai.DefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), client.Timeout())
 	defer cancel()
 
 	output, err := client.Generate(ctx, profile.Prompt, input)
@@ -261,6 +261,13 @@ func (w *Watcher) process() {
 		w.onUpdate(Update{Input: input, Output: output})
 	}
 	w.status(StatusIdle, "")
+}
+
+func newTranslator(cfg *config.Config) ai.Translator {
+	if cfg.ProviderName() == config.ProviderLocal {
+		return ai.NewLocal(cfg.LocalURL(), cfg.LocalModelName(), cfg.LocalAPIKeyValue(), cfg.LocalTimeout())
+	}
+	return ai.New(cfg.APIKeyValue(), cfg.ModelName())
 }
 
 func (w *Watcher) fail(input string, err error) {

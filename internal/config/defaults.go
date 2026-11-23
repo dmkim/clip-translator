@@ -12,6 +12,12 @@ const (
 	DefaultModel = "gemini-flash-lite-latest"
 	// DefaultProfileName is the profile selected on first run.
 	DefaultProfileName = "WoW 북미 서버 채팅"
+
+	ProviderGemini = "gemini"
+	ProviderLocal  = "local"
+
+	DefaultLocalBaseURL        = "http://localhost:11434/v1"
+	DefaultLocalTimeoutSeconds = 120
 )
 
 // default.json is the template written when config.json does not exist. It
@@ -21,11 +27,15 @@ const (
 var defaultConfigJSON []byte
 
 type bundledTemplate struct {
-	Model         string    `json:"model"`
-	Hotkey        string    `json:"hotkey"`
-	AlwaysOnTop   bool      `json:"always_on_top"`
-	ActiveProfile string    `json:"active_profile"`
-	Profiles      []Profile `json:"profiles"`
+	Provider            string    `json:"provider"`
+	Model               string    `json:"model"`
+	LocalBaseURL        string    `json:"local_base_url"`
+	LocalModel          string    `json:"local_model"`
+	LocalTimeoutSeconds int       `json:"local_timeout_seconds"`
+	Hotkey              string    `json:"hotkey"`
+	AlwaysOnTop         bool      `json:"always_on_top"`
+	ActiveProfile       string    `json:"active_profile"`
+	Profiles            []Profile `json:"profiles"`
 }
 
 // bundledDefaults parses the embedded template. It never returns an API key.

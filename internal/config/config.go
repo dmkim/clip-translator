@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Profile is a named system prompt used to transform clipboard text.
@@ -25,12 +26,17 @@ type Config struct {
 	mu   sync.RWMutex
 	path string
 
-	APIKey        string    `json:"api_key"`
-	Model         string    `json:"model"`
-	Hotkey        string    `json:"hotkey"`
-	AlwaysOnTop   bool      `json:"always_on_top"`
-	ActiveProfile string    `json:"active_profile"`
-	Profiles      []Profile `json:"profiles"`
+	APIKey              string    `json:"api_key"`
+	Model               string    `json:"model"`
+	Provider            string    `json:"provider"`
+	LocalBaseURL        string    `json:"local_base_url"`
+	LocalModel          string    `json:"local_model"`
+	LocalAPIKey         string    `json:"local_api_key"`
+	LocalTimeoutSeconds int       `json:"local_timeout_seconds"`
+	Hotkey              string    `json:"hotkey"`
+	AlwaysOnTop         bool      `json:"always_on_top"`
+	ActiveProfile       string    `json:"active_profile"`
+	Profiles            []Profile `json:"profiles"`
 }
 
 // Load reads config.json, creating it with defaults when it does not exist.
@@ -152,6 +158,63 @@ func normalizeModel(value string) string {
 		return replacement
 	}
 	return value
+}
+
+func normalizeProvider(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), ProviderLocal) {
+		return ProviderLocal
+	}
+	return ProviderGemini
+}
+
+func (c *Config) ProviderName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return normalizeProvider(c.Provider)
+}
+
+func (c *Config) LocalURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if strings.TrimSpace(c.LocalBaseURL) == "" {
+		return DefaultLocalBaseURL
+	}
+	return strings.TrimSpace(c.LocalBaseURL)
+}
+
+func (c *Config) LocalModelName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return strings.TrimSpace(c.LocalModel)
+}
+
+func (c *Config) LocalAPIKeyValue() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return strings.TrimSpace(c.LocalAPIKey)
+}
+
+func (c *Config) LocalTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	seconds := c.LocalTimeoutSeconds
+	if seconds <= 0 {
+		seconds = DefaultLocalTimeoutSeconds
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (c *Config) SetAIConfig(provider, baseURL, model, apiKey string, timeoutSeconds int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = DefaultLocalTimeoutSeconds
+	}
+	c.Provider = normalizeProvider(provider)
+	c.LocalBaseURL = strings.TrimSpace(baseURL)
+	c.LocalModel = strings.TrimSpace(model)
+	c.LocalAPIKey = strings.TrimSpace(apiKey)
+	c.LocalTimeoutSeconds = timeoutSeconds
 }
 
 // HotkeySpec returns the configured global hotkey, falling back to the default.
@@ -370,21 +433,29 @@ func (c *Config) nameTakenLocked(name string) bool {
 
 func (c *Config) applyDefaults() {
 	if tpl, ok := bundledDefaults(); ok {
+		c.Provider = tpl.Provider
 		c.Model = tpl.Model
+		c.LocalBaseURL = tpl.LocalBaseURL
+		c.LocalModel = tpl.LocalModel
+		c.LocalTimeoutSeconds = tpl.LocalTimeoutSeconds
 		c.Hotkey = tpl.Hotkey
 		c.AlwaysOnTop = tpl.AlwaysOnTop
 		c.ActiveProfile = tpl.ActiveProfile
 		c.Profiles = tpl.Profiles
 	} else {
+		c.Provider = ProviderGemini
 		c.AlwaysOnTop = false
 		c.Hotkey = DefaultHotkey
 		c.Model = DefaultModel
+		c.LocalBaseURL = DefaultLocalBaseURL
+		c.LocalTimeoutSeconds = DefaultLocalTimeoutSeconds
 		c.ActiveProfile = DefaultProfileName
 		c.Profiles = defaultProfiles()
 	}
 
 	// The generated config must never contain an API key.
 	c.APIKey = ""
+	c.LocalAPIKey = ""
 	c.Model = normalizeModel(c.Model)
 	if len(c.Profiles) == 0 {
 		c.Profiles = defaultProfiles()
@@ -403,6 +474,16 @@ func (c *Config) normalizeLocked() {
 		c.Hotkey = DefaultHotkey
 	}
 	c.Model = normalizeModel(c.Model)
+	c.Provider = normalizeProvider(c.Provider)
+	c.LocalBaseURL = strings.TrimSpace(c.LocalBaseURL)
+	if c.LocalBaseURL == "" {
+		c.LocalBaseURL = DefaultLocalBaseURL
+	}
+	c.LocalModel = strings.TrimSpace(c.LocalModel)
+	c.LocalAPIKey = strings.TrimSpace(c.LocalAPIKey)
+	if c.LocalTimeoutSeconds <= 0 {
+		c.LocalTimeoutSeconds = DefaultLocalTimeoutSeconds
+	}
 	if len(c.Profiles) == 0 {
 		c.Profiles = defaultProfiles()
 	}

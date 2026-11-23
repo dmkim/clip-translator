@@ -1,6 +1,6 @@
 # clip-translator
 
-클립보드의 텍스트를 Gemini로 변환해 다시 클립보드에 덮어쓰는 초경량 Windows 데스크톱 유틸리티입니다. 프리셋 프롬프트를 활용하면 맞춤법 검사기, 번역기, 요약기, 영작 도우미 등 게임 채팅(WoW 북미 서버)부터 업무 메신저까지 다양한 용도로 활용할 수 있습니다.
+클립보드의 텍스트를 Gemini 또는 로컬 LLM으로 변환해 다시 클립보드에 덮어쓰는 초경량 Windows 데스크톱 유틸리티입니다. 프리셋 프롬프트를 활용하면 맞춤법 검사기, 번역기, 요약기, 영작 도우미 등 게임 채팅(WoW 북미 서버)부터 업무 메신저까지 다양한 용도로 활용할 수 있습니다.
 
 ## 다운로드
 
@@ -14,7 +14,7 @@
 
 1. 텍스트를 선택한 뒤 `Ctrl + X` 또는 `Ctrl + C`
 2. 글로벌 단축키(기본 `Ctrl + Shift + T`) 입력
-3. 현재 선택된 프리셋(시스템 프롬프트)으로 Gemini API 호출
+3. 현재 선택된 프리셋(시스템 프롬프트)과 AI 제공자(Gemini 또는 로컬 LLM)로 변환 요청
 4. 변환 결과를 클립보드에 덮어쓰고 비프음과 함께 창에 결과 표시
 5. `Ctrl + V`로 붙여넣기
 
@@ -22,7 +22,8 @@
 
 - Windows 10/11 (amd64)
 - Go 1.24+ (빌드 시, C 컴파일러 불필요)
-- Google Gemini API Key ([Google AI Studio](https://aistudio.google.com/apikey)에서 무료로 발급 가능)
+- Google Gemini API Key ([Google AI Studio](https://aistudio.google.com/apikey)에서 무료로 발급 가능) — Gemini 사용 시
+- OpenAI 호환 로컬 LLM 서버(Ollama, LM Studio, llama.cpp 등) — 로컬 LLM 사용 시
 
 ## 빌드
 
@@ -53,7 +54,9 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 ## 사용법
 
 1. `bin/clip-translator.exe` 실행
-2. 하단 **API 설정**에 Gemini API Key 입력 후 **[키 저장]**
+2. 하단 **AI 설정**에서 제공자를 선택합니다.
+   - **Gemini**: API Key 입력 후 **[키 저장]**
+   - **로컬 LLM**: **[설정...]**에서 Base URL/모델/타임아웃을 저장하고 **[테스트]**로 연결 확인
 3. **프리셋** 드롭다운에서 프롬프트 선택/편집 후 **[프롬프트 저장]**
 4. 상태 표시 옆 **⚙ 아이콘**을 눌러 글로벌 단축키 변경 가능 (예: `Ctrl+Shift+F9`)
 5. 아무 프로그램에서 텍스트를 복사/잘라내기 후 설정된 단축키 입력
@@ -64,29 +67,57 @@ go build -ldflags="-H=windowsgui -s -w" -o bin/clip-translator.exe ./cmd/clip-tr
 
 - 네이티브 Win32(walk) 기반의 컴팩트한 단일 창
 - 상단 상태 라벨(🟢 대기 / 🟡 처리 중 / 🔴 오류) + **⚙ 아이콘**(단축키 변경) + **항상 위** 체크박스
-- 프리셋 선택/추가/삭제, 프롬프트 편집, 최근 결과(재복사), API 키 관리
+- 프리셋 선택/추가/삭제, 프롬프트 편집, 최근 결과(재복사), AI 제공자/API 키/로컬 LLM 설정
 - 단축키 변경 시 기존 등록을 해제하고 즉시 재등록 (실패 시 기존 단축키 복원)
-- 창 크기 `380 × 500` (최소 높이 470, DPI 자동 스케일)
+- 창 크기 `380 × 540` (최소 높이 500, DPI 자동 스케일)
 - 알림음: 시작(523→659Hz 상승 두 음) / 성공(800Hz) / 실패(300Hz)로 구분
 
 ## 설정 파일
 
 설정은 실행 파일과 같은 폴더의 `config.json`에 저장됩니다. `go run`으로 실행하는 경우(실행 파일이 임시 폴더에 생성됨)에는 `%AppData%\clip-translator\config.json`을 사용합니다.
 
-`config.json`이 없으면 실행 시 `internal/config/default.json`에 내장된 프리셋으로 자동 생성되며, **API Key만 빈 값**으로 저장됩니다. 템플릿은 `configs/config.example.json`에서도 확인할 수 있습니다.
+`config.json`이 없으면 실행 시 `internal/config/default.json`에 내장된 프리셋으로 자동 생성되며, **API Key는 Gemini와 로컬 LLM 모두 빈 값**으로 저장됩니다. 템플릿은 `configs/config.example.json`에서도 확인할 수 있습니다.
 
 | 필드 | 설명 | 기본값 |
 | --- | --- | --- |
 | `api_key` | Gemini API Key (저장소에 커밋 금지) | `""` |
 | `model` | 사용할 Gemini 모델 | `gemini-flash-lite-latest` |
+| `provider` | AI 제공자 (`gemini` 또는 `local`) | `gemini` |
+| `local_base_url` | OpenAI 호환 로컬 서버 주소 | `http://localhost:11434/v1` |
+| `local_model` | 로컬 LLM 모델 이름 | `""` |
+| `local_api_key` | 로컬 서버 인증 키 (선택) | `""` |
+| `local_timeout_seconds` | 로컬 LLM 요청 타임아웃 | `120` |
 | `hotkey` | 글로벌 단축키 | `Ctrl+Shift+T` |
 | `always_on_top` | 항상 위 표시 | `false` |
 | `active_profile` | 현재 선택된 프리셋 이름 | `WoW 북미 서버 채팅` |
-| `profiles` | 이름과 시스템 프롬프트 목록 | 4개 기본 프리셋 |
+| `profiles` | 이름과 시스템 프롬프트 목록 | 5개 기본 프리셋 |
 
-단축키는 `Ctrl`, `Alt`, `Shift`, `Win` 조합과 `A-Z`, `0-9`, `F1-F20`, `Space`, `Tab`, `Enter`, `Esc`, `Delete`, 방향키를 지원합니다. 이전 기본 모델(`gemini-2.5-flash-lite`, `gemini-3.5-flash-lite`)이 설정되어 있으면 실행 시 `gemini-flash-lite-latest`로 자동 마이그레이션됩니다.
+단축키는 `Ctrl`, `Alt`, `Shift`, `Win` 조합과 `A-Z`, `0-9`, `F1-F20`, `Space`, `Tab`, `Enter`, `Esc`, `Delete`, 방향키를 지원합니다. 이전 기본 모델(`gemini-2.5-flash-lite`, `gemini-3.5-flash-lite`)이 설정되어 있으면 실행 시 `gemini-flash-lite-latest`로 자동 마이그레이션됩니다. 이 마이그레이션은 Gemini 모델에만 적용되며 로컬 모델 이름은 그대로 유지됩니다.
 
-응답 지연을 줄이기 위해 `temperature`는 0.3으로 낮추고 내부 추론을 최소화합니다. Flash-Lite 계열(Gemini 3.x, `-latest`)은 `thinkingLevel: minimal`, Gemini 2.5 Flash는 `thinkingBudget: 0`을 사용하며, 그 외 모델에는 추론 옵션을 보내지 않습니다. 또한 앱 시작 시 Gemini 엔드포인트에 미리 연결하고, 5분마다 연결을 갱신하며 최대 30분간 커넥션을 유지해 첫 요청·재연결 지연을 줄입니다.
+응답 지연을 줄이기 위해 `temperature`는 0.3으로 낮추고 내부 추론을 최소화합니다. Flash-Lite 계열(Gemini 3.x, `-latest`)은 `thinkingLevel: minimal`, Gemini 2.5 Flash는 `thinkingBudget: 0`을 사용하며, 그 외 모델에는 추론 옵션을 보내지 않습니다. 또한 Gemini 사용 시 앱 시작 시 엔드포인트에 미리 연결하고, 5분마다 연결을 갱신하며 최대 30분간 커넥션을 유지해 첫 요청·재연결 지연을 줄입니다.
+
+## 로컬 LLM
+
+**AI 설정 → 제공자**에서 `로컬 LLM (OpenAI 호환)`을 선택한 뒤 **[설정...]**에서 서버 주소와 모델을 지정합니다. OpenAI 호환 `/v1/chat/completions` API를 지원하는 서버라면 별도 구현 없이 사용할 수 있습니다.
+
+| 런타임 | Base URL | 예시 |
+| --- | --- | --- |
+| Ollama | `http://localhost:11434/v1` | `ollama serve` |
+| LM Studio | `http://localhost:1234/v1` | Local Server 활성화 |
+| llama.cpp | `http://localhost:8080/v1` | `llama-server -m model.gguf --port 8080` |
+
+Ollama 예시:
+
+```powershell
+ollama serve
+ollama pull qwen2.5:7b-instruct
+```
+
+- **[불러오기]**를 누르면 `GET {base_url}/models`에서 모델 목록을 가져와 선택할 수 있습니다.
+- 모델 이름은 서버에 설치된 모델과 정확히 일치해야 합니다.
+- 원격 서버나 인증이 필요한 서버는 **API Key**를 입력하면 `Authorization: Bearer <key>` 헤더로 전송됩니다.
+- **[테스트]**는 `GET {base_url}/models`로 연결을 확인합니다. 일부 서버가 이 엔드포인트를 지원하지 않으면 경고가 표시되지만 번역은 동작할 수 있습니다.
+- 로컬 LLM은 스트리밍을 사용하지 않으며, 응답이 완료될 때까지 기다립니다. 기본 타임아웃은 120초입니다.
 
 ## 자동 업데이트
 
@@ -122,7 +153,9 @@ git push origin v0.1.0
 clip-translator/
 ├── cmd/clip-translator/main.go      # 진입점, 의존성 조립 및 GUI 실행
 ├── internal/config/                 # config.json 로드/저장, default.json 프리셋 템플릿
+├── internal/ai/translator.go        # 번역 제공자 인터페이스
 ├── internal/ai/gemini.go            # Gemini REST 클라이언트 (30초 타임아웃)
+├── internal/ai/local.go             # OpenAI 호환 로컬 LLM 클라이언트 (기본 120초 타임아웃)
 ├── internal/clipboard/watcher.go    # 글로벌 단축키 + 클립보드 파이프라인
 ├── internal/ui/window.go            # walk GUI, 상태 표시, 비프음
 ├── internal/ui/assets/              # 앱 아이콘/단축키 아이콘 (임베드)
@@ -135,4 +168,4 @@ clip-translator/
 
 ## 보안
 
-`config.json`에는 API Key가 평문으로 저장되며 `.gitignore`에 등록되어 있습니다. 실행 파일을 공유할 때 `config.json`을 함께 배포하지 마세요.
+`config.json`에는 Gemini API Key와 로컬 LLM API Key가 평문으로 저장되며 `.gitignore`에 등록되어 있습니다. 실행 파일을 공유할 때 `config.json`을 함께 배포하지 마세요.

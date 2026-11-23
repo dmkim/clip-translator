@@ -16,10 +16,6 @@ import (
 )
 
 func main() {
-	keepAliveCtx, stopKeepAlive := context.WithCancel(context.Background())
-	defer stopKeepAlive()
-	go ai.KeepAlive(keepAliveCtx, 5*time.Minute)
-
 	app, err := walk.InitApp()
 	if err != nil {
 		log.Fatal(err)
@@ -34,6 +30,12 @@ func main() {
 	}
 	if cfg == nil {
 		cfg = config.NewDefault()
+	}
+
+	if cfg.ProviderName() == config.ProviderGemini {
+		keepAliveCtx, stopKeepAlive := context.WithCancel(context.Background())
+		defer stopKeepAlive()
+		go ai.KeepAlive(keepAliveCtx, 5*time.Minute)
 	}
 
 	win, err := ui.New(cfg)

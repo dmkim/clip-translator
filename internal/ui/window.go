@@ -7,6 +7,8 @@ import (
 	_ "embed"
 	"fmt"
 	"image/png"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -18,6 +20,7 @@ import (
 	"github.com/tailscale/win"
 	xclipboard "golang.design/x/clipboard"
 
+	"github.com/genius/clip-translator/internal/ai"
 	appclipboard "github.com/genius/clip-translator/internal/clipboard"
 	"github.com/genius/clip-translator/internal/config"
 	"github.com/genius/clip-translator/internal/update"
@@ -26,8 +29,8 @@ import (
 
 const (
 	defaultWindowWidth     = 380
-	defaultWindowHeight    = 500
-	defaultWindowMinHeight = 470
+	defaultWindowHeight    = 540
+	defaultWindowMinHeight = 500
 	newProfilePrompt       = "Translate the user's input into natural, idiomatic English. Output ONLY the translation."
 
 	// toolIconSize is the rendered size of the gear/help icons in pixels at
@@ -110,6 +113,12 @@ type Window struct {
 	inLabel       *walk.Label
 	outEdit       *walk.TextEdit
 	apiKeyEdit    *walk.LineEdit
+	providerRow   *walk.Composite
+	providerTitle *walk.Label
+	providerCombo *walk.ComboBox
+	geminiRow     *walk.Composite
+	localRow      *walk.Composite
+	localSummary  *walk.Label
 
 	lastOutput    string
 	initializing  bool
@@ -262,22 +271,66 @@ func New(cfg *config.Config) (*Window, error) {
 				},
 			},
 			d.GroupBox{
-				Title:  "API 설정",
-				Layout: d.VBox{},
+				Title:  "AI 설정",
+				Layout: d.VBox{Spacing: 6},
 				Children: []d.Widget{
 					d.Composite{
-						Layout: d.HBox{Spacing: 4, MarginsZero: true},
+						AssignTo: &w.providerRow,
+						Layout:   d.Grid{Columns: 2, Spacing: 6, MarginsZero: true},
+						MinSize:  d.Size{Height: 29},
+						Children: []d.Widget{
+							d.Label{
+								AssignTo:  &w.providerTitle,
+								Text:      "제공자:",
+								Column:    0,
+								Alignment: d.AlignHNearVCenter,
+							},
+							d.ComboBox{
+								AssignTo:              &w.providerCombo,
+								Column:                1,
+								Model:                 []string{"Gemini (클라우드)", "로컬 LLM (OpenAI 호환)"},
+								Alignment:             d.AlignHNearVCenter,
+								OnCurrentIndexChanged: w.onProviderChanged,
+							},
+						},
+					},
+					d.Composite{
+						AssignTo: &w.geminiRow,
+						Layout:   d.HBox{Spacing: 4, MarginsZero: true},
 						Children: []d.Widget{
 							d.LineEdit{
-								AssignTo:     &w.apiKeyEdit,
-								Text:         cfg.APIKeyValue(),
-								PasswordMode: true,
-								CueBanner:    "Gemini API Key",
+								AssignTo:      &w.apiKeyEdit,
+								Text:          cfg.APIKeyValue(),
+								PasswordMode:  true,
+								CueBanner:     "Gemini API Key",
+								StretchFactor: 1,
 							},
 							d.PushButton{
 								Text:      "키 저장",
 								MinSize:   d.Size{Width: 64},
 								OnClicked: w.saveAPIKey,
+							},
+						},
+					},
+					d.Composite{
+						AssignTo: &w.localRow,
+						Layout:   d.HBox{Spacing: 4, MarginsZero: true},
+						Children: []d.Widget{
+							d.Label{
+								AssignTo:      &w.localSummary,
+								Text:          w.localSummaryText(),
+								EllipsisMode:  d.EllipsisEnd,
+								StretchFactor: 1,
+							},
+							d.PushButton{
+								Text:      "설정...",
+								MinSize:   d.Size{Width: 60},
+								OnClicked: w.openLocalSettings,
+							},
+							d.PushButton{
+								Text:      "테스트",
+								MinSize:   d.Size{Width: 60},
+								OnClicked: w.testLocalConnection,
 							},
 						},
 					},
@@ -296,6 +349,9 @@ func New(cfg *config.Config) (*Window, error) {
 	w.mw.StatusBar().SetVisible(false)
 	w.mw.SetExitOnClose(false)
 
+	_ = w.providerCombo.SetCurrentIndex(providerIndex(cfg.ProviderName()))
+	w.applyProviderVisibility()
+
 	// Keep the API key cue banner visible on first run by focusing the result
 	// box once the initial layout has finished.
 	w.mw.RequestLayoutWithCompletionFunc(func() {
@@ -309,9 +365,15 @@ func New(cfg *config.Config) (*Window, error) {
 
 	w.initializing = false
 	w.applyTopMost()
-	time.AfterFunc(300*time.Millisecond, func() { w.post(w.fitProfileButtonHeight) })
+	time.AfterFunc(300*time.Millisecond, func() {
+		w.post(w.fitProfileButtonHeight)
+		w.post(w.fitProviderRow)
+	})
 	w.mw.SizeChanged().Attach(func() {
-		time.AfterFunc(50*time.Millisecond, func() { w.post(w.fitProfileButtonHeight) })
+		time.AfterFunc(50*time.Millisecond, func() {
+			w.post(w.fitProfileButtonHeight)
+			w.post(w.fitProviderRow)
+		})
 	})
 
 	w.rebuildProfileMenu()
@@ -465,7 +527,7 @@ func (w *Window) ShowBusy() {
 		if w.toast == nil {
 			return
 		}
-		w.toast.show(w.cfg.ActiveProfileName() + " · Gemini 요청 중")
+		w.toast.show(w.cfg.ActiveProfileName() + " · " + w.providerLabel() + " 요청 중")
 	})
 }
 
@@ -802,6 +864,44 @@ func (w *Window) fitProfileButtonHeight() {
 	_ = w.profileButton.SetBoundsPixels(bounds)
 }
 
+func (w *Window) fitProviderRow() {
+	if w.providerRow == nil || w.providerCombo == nil || w.providerCombo.Parent() == nil {
+		return
+	}
+
+	row := w.providerRow.BoundsPixels()
+	bounds := w.providerCombo.BoundsPixels()
+	width := row.Width - bounds.X
+	changed := false
+
+	if row.Width > 0 && width > 0 && bounds.Width != width {
+		bounds.Width = width
+		changed = true
+	}
+	if row.Height > 0 && bounds.Height > 0 {
+		y := (row.Height - bounds.Height) / 2
+		if bounds.Y != y {
+			bounds.Y = y
+			changed = true
+		}
+	}
+	if changed {
+		_ = w.providerCombo.SetBoundsPixels(bounds)
+	}
+
+	if w.providerTitle == nil || w.providerTitle.Parent() == nil {
+		return
+	}
+	label := w.providerTitle.BoundsPixels()
+	if row.Height > 0 && label.Height > 0 {
+		y := (row.Height - label.Height) / 2
+		if label.Y != y {
+			label.Y = y
+			_ = w.providerTitle.SetBoundsPixels(label)
+		}
+	}
+}
+
 func (w *Window) savePrompt() {
 	name := w.cfg.ActiveProfileName()
 	if !w.cfg.SetPrompt(name, w.promptEdit.Text()) {
@@ -827,6 +927,280 @@ func (w *Window) saveAPIKey() {
 		return
 	}
 	w.flashStatus("🟢 API 키 저장됨")
+}
+
+func providerIndex(provider string) int {
+	if provider == config.ProviderLocal {
+		return 1
+	}
+	return 0
+}
+
+func (w *Window) providerLabel() string {
+	if w.cfg.ProviderName() == config.ProviderLocal {
+		return "로컬 LLM"
+	}
+	return "Gemini"
+}
+
+func (w *Window) localSummaryText() string {
+	model := w.cfg.LocalModelName()
+	if model == "" {
+		model = "모델 미설정"
+	}
+	return w.cfg.LocalURL() + " · " + model
+}
+
+func (w *Window) applyProviderVisibility() {
+	local := w.providerCombo != nil && w.providerCombo.CurrentIndex() == 1
+	if w.geminiRow != nil {
+		w.geminiRow.SetVisible(!local)
+	}
+	if w.localRow != nil {
+		w.localRow.SetVisible(local)
+	}
+	if local && w.localSummary != nil {
+		w.localSummary.SetText(w.localSummaryText())
+	}
+	if w.mw != nil {
+		w.mw.RequestLayout()
+		time.AfterFunc(50*time.Millisecond, func() { w.post(w.fitProviderRow) })
+	}
+}
+
+func (w *Window) onProviderChanged() {
+	if w.initializing {
+		return
+	}
+
+	provider := config.ProviderGemini
+	if w.providerCombo.CurrentIndex() == 1 {
+		provider = config.ProviderLocal
+	}
+
+	w.cfg.SetAIConfig(provider, w.cfg.LocalURL(), w.cfg.LocalModelName(), w.cfg.LocalAPIKeyValue(), int(w.cfg.LocalTimeout()/time.Second))
+	if err := w.cfg.Save(); err != nil {
+		w.flashStatus("🔴 설정 저장 실패: " + err.Error())
+		return
+	}
+
+	w.applyProviderVisibility()
+	if provider == config.ProviderLocal {
+		w.flashStatus("🟢 로컬 LLM 선택됨")
+		return
+	}
+	w.flashStatus("🟢 Gemini 선택됨")
+}
+
+func validateLocalBaseURL(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fmt.Errorf("Base URL을 입력하세요")
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("Base URL이 올바르지 않습니다: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("Base URL은 http:// 또는 https://로 시작해야 합니다")
+	}
+	if u.Host == "" {
+		return fmt.Errorf("Base URL에 호스트가 없습니다")
+	}
+	return nil
+}
+
+func (w *Window) pingLocal(baseURL, apiKey string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return ai.PingLocal(ctx, baseURL, apiKey)
+}
+
+func (w *Window) fetchLocalModels(baseURL, apiKey string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return ai.ListLocalModels(ctx, baseURL, apiKey)
+}
+
+func (w *Window) testLocalConnection() {
+	baseURL := w.cfg.LocalURL()
+	apiKey := w.cfg.LocalAPIKeyValue()
+
+	w.flashStatus("🟡 로컬 LLM 연결 확인 중...")
+	go func() {
+		err := w.pingLocal(baseURL, apiKey)
+		w.post(func() {
+			if err != nil {
+				w.flashStatus("🔴 로컬 LLM 연결 실패")
+				walk.MsgBox(w.mw, "연결 테스트 실패", err.Error(), walk.MsgBoxIconError)
+				return
+			}
+			w.flashStatus("🟢 로컬 LLM 연결 성공")
+		})
+	}()
+}
+
+func (w *Window) openLocalSettings() {
+	var dlg *walk.Dialog
+	var baseEdit, keyEdit, timeoutEdit *walk.LineEdit
+	var modelEdit *walk.ComboBox
+	var acceptPB, cancelPB, testPB, loadModelsPB *walk.PushButton
+
+	err := (d.Dialog{
+		AssignTo:      &dlg,
+		Title:         "로컬 LLM 설정",
+		Size:          d.Size{Width: 380, Height: 300},
+		MinSize:       d.Size{Width: 360, Height: 280},
+		Layout:        d.VBox{Spacing: 6},
+		DefaultButton: &acceptPB,
+		CancelButton:  &cancelPB,
+		Children: []d.Widget{
+			d.Label{Text: "Base URL (예: http://localhost:11434/v1)"},
+			d.LineEdit{
+				AssignTo:  &baseEdit,
+				Text:      w.cfg.LocalURL(),
+				CueBanner: "http://localhost:11434/v1",
+			},
+			d.Label{Text: "모델 이름 (예: qwen2.5:7b-instruct)"},
+			d.Composite{
+				Layout: d.HBox{Spacing: 4, MarginsZero: true},
+				Children: []d.Widget{
+					d.ComboBox{
+						AssignTo:      &modelEdit,
+						Editable:      true,
+						StretchFactor: 1,
+						Model:         []string{},
+					},
+					d.PushButton{
+						AssignTo: &loadModelsPB,
+						Text:     "불러오기",
+						MinSize:  d.Size{Width: 72},
+						OnClicked: func() {
+							baseURL := strings.TrimSpace(baseEdit.Text())
+							if err := validateLocalBaseURL(baseURL); err != nil {
+								walk.MsgBox(dlg, "모델 불러오기", err.Error(), walk.MsgBoxIconWarning)
+								return
+							}
+
+							apiKey := strings.TrimSpace(keyEdit.Text())
+							loadModelsPB.SetEnabled(false)
+							go func() {
+								models, err := w.fetchLocalModels(baseURL, apiKey)
+								dlg.Synchronize(func() {
+									loadModelsPB.SetEnabled(true)
+									if err != nil {
+										walk.MsgBox(dlg, "모델 불러오기 실패", err.Error(), walk.MsgBoxIconError)
+										return
+									}
+									if len(models) == 0 {
+										walk.MsgBox(dlg, "모델 불러오기", "사용 가능한 모델이 없습니다.", walk.MsgBoxIconWarning)
+										return
+									}
+
+									current := strings.TrimSpace(modelEdit.Text())
+									_ = modelEdit.SetModel(models)
+									index := 0
+									for i, name := range models {
+										if name == current {
+											index = i
+											break
+										}
+									}
+									_ = modelEdit.SetCurrentIndex(index)
+									_ = modelEdit.SetText(models[index])
+									if len(models) > 1 {
+										walk.MsgBox(dlg, "모델 불러오기", fmt.Sprintf("%d개 모델을 불러왔습니다. 드롭다운에서 선택하세요.", len(models)), walk.MsgBoxIconInformation)
+									}
+								})
+							}()
+						},
+					},
+				},
+			},
+			d.Label{Text: "API Key (선택 사항)"},
+			d.LineEdit{
+				AssignTo:     &keyEdit,
+				Text:         w.cfg.LocalAPIKeyValue(),
+				PasswordMode: true,
+				CueBanner:    "필요한 경우에만 입력",
+			},
+			d.Label{Text: "타임아웃 (초)"},
+			d.LineEdit{
+				AssignTo:  &timeoutEdit,
+				Text:      strconv.Itoa(int(w.cfg.LocalTimeout() / time.Second)),
+				CueBanner: "120",
+			},
+			d.Composite{
+				Layout: d.HBox{Spacing: 4},
+				Children: []d.Widget{
+					d.PushButton{
+						AssignTo: &testPB,
+						Text:     "연결 테스트",
+						OnClicked: func() {
+							baseURL := strings.TrimSpace(baseEdit.Text())
+							if err := validateLocalBaseURL(baseURL); err != nil {
+								walk.MsgBox(dlg, "연결 테스트", err.Error(), walk.MsgBoxIconWarning)
+								return
+							}
+
+							apiKey := strings.TrimSpace(keyEdit.Text())
+							testPB.SetEnabled(false)
+							go func() {
+								err := w.pingLocal(baseURL, apiKey)
+								dlg.Synchronize(func() {
+									testPB.SetEnabled(true)
+									if err != nil {
+										walk.MsgBox(dlg, "연결 테스트 실패", err.Error(), walk.MsgBoxIconError)
+										return
+									}
+									walk.MsgBox(dlg, "연결 테스트", "로컬 LLM 서버에 연결할 수 있습니다.", walk.MsgBoxIconInformation)
+								})
+							}()
+						},
+					},
+					d.HSpacer{},
+					d.PushButton{
+						AssignTo: &acceptPB,
+						Text:     "저장",
+						OnClicked: func() {
+							if err := validateLocalBaseURL(baseEdit.Text()); err != nil {
+								walk.MsgBox(dlg, "로컬 LLM 설정", err.Error(), walk.MsgBoxIconWarning)
+								return
+							}
+							timeoutSeconds, err := strconv.Atoi(strings.TrimSpace(timeoutEdit.Text()))
+							if err != nil || timeoutSeconds <= 0 {
+								walk.MsgBox(dlg, "로컬 LLM 설정", "타임아웃은 1초 이상의 숫자로 입력하세요.", walk.MsgBoxIconWarning)
+								return
+							}
+
+							w.cfg.SetAIConfig(config.ProviderLocal, baseEdit.Text(), modelEdit.Text(), keyEdit.Text(), timeoutSeconds)
+							if err := w.cfg.Save(); err != nil {
+								walk.MsgBox(dlg, "로컬 LLM 설정", "설정 저장 실패: "+err.Error(), walk.MsgBoxIconError)
+								return
+							}
+
+							w.applyProviderVisibility()
+							w.flashStatus("🟢 로컬 LLM 설정 저장됨")
+							dlg.Accept()
+						},
+					},
+					d.PushButton{
+						AssignTo:  &cancelPB,
+						Text:      "취소",
+						OnClicked: func() { dlg.Cancel() },
+					},
+				},
+			},
+		},
+	}).Create(w.mw)
+	if err != nil {
+		walk.MsgBox(w.mw, "로컬 LLM 설정", err.Error(), walk.MsgBoxIconError)
+		return
+	}
+
+	_ = modelEdit.SetText(w.cfg.LocalModelName())
+	dlg.Run()
 }
 
 func (w *Window) showHelp() {

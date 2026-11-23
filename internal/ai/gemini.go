@@ -169,6 +169,10 @@ type generateResponse struct {
 	} `json:"error"`
 }
 
+func (c *Client) Timeout() time.Duration {
+	return c.http.Timeout
+}
+
 // Generate sends systemPrompt and input to Gemini and returns the response
 // text with surrounding whitespace removed.
 func (c *Client) Generate(ctx context.Context, systemPrompt, input string) (string, error) {
